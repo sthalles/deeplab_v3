@@ -2,11 +2,8 @@
 import argparse
 from network import model_input, model_loss,  model_loss_with_class_balancing, densenet_segmentation, densenet_fcn_segmentation, deeplab_segmentation #,dense_segmentation_convnet_out_stride_8 #, model_arg_scope
 import tensorflow as tf
-from tensorflow.python.ops import control_flow_ops
-from read_data import next_batch, reconstruct_image, tf_record_parser, cutout
+from read_data import tf_record_parser, cutout
 import numpy as np
-from matplotlib import pyplot as plt
-from scipy.misc import imsave
 slim = tf.contrib.slim
 import os
 import json
@@ -14,40 +11,50 @@ from preprocessing import random_flip_image_and_annotation
 from preprocessing import distort_randomly_image_color
 from shutil import copyfile
 
+
+# 0=background
+# 1=aeroplane
+# 2=bicycle
+# 3=bird
+# 4=boat
+# 5=bottle
+# 6=bus
+# 7=car
+# 8=cat
+# 9=chair
+# 10=cow
+# 11=diningtable
+# 12=dog
+# 13=horse
+# 14=motorbike
+# 15=person
+# 16=potted plant
+# 17=sheep
+# 18=sofa
+# 19=train
+# 20=tv/monitor
+# 255=unknown
+
 os.environ["CUDA_VISIBLE_DEVICES"]="3"
 parser = argparse.ArgumentParser()
 
 envarg = parser.add_argument_group('Model')
 envarg.add_argument("--batch_norm_epsilon", type=float, default=1e-5, help="batch norm epsilon argument for batch normalization")
-envarg.add_argument('--batch_norm_decay', type=float, default=0.9, help='batch norm decay argument for batch normalization.')
-envarg.add_argument('--keep_prob', type=float, default=1.0, help='Dropout keep probability.')
-envarg.add_argument("--theta", type=float, default=0.5, help="Compression factor for the DenseNetwork 0 < θ ≤1.")
-envarg.add_argument("--growth_rate", type=int, default=24, help="Growth rate for the DenseNetwork, the paper refars to it as the k parameter.")
-envarg.add_argument("--number_of_classes", type=int, default=3, help="Number of classes to be predicted.")
-envarg.add_argument("--aspp", type=bool, default=True, help="Use Atrous spatial pyrimid pooling.")
-envarg.add_argument("--image_summary", type=bool, default=True, help="Activate tensorboard image_summary.")
+envarg.add_argument('--batch_norm_decay', type=float, default=0.9997, help='batch norm decay argument for batch normalization.')
+envarg.add_argument("--number_of_classes", type=int, default=21, help="Number of classes to be predicted.")
 envarg.add_argument("--l2_regularizer", type=float, default=0.0001, help="l2 regularizer parameter.")
-envarg.add_argument('--starting_learning_rate', type=float, default=0.002, help="starting learning rate.")
-envarg.add_argument('--optimizer',choices=['momentum', 'adam', 'rmsprop'], default='adam', help='Optimizer of choice.')
-envarg.add_argument("--channel_wise_inhibited_softmax", type=bool, default=True, help="Apply channel wise inhibited softmax.")
-envarg.add_argument('--normalizer', choices=['standard', 'mean_subtraction', 'simple_norm'], default='simple_norm', help='Normalization option.')
-envarg.add_argument('--upsampling_mode', choices=['resize', 'bilinear_transpose_conv'], default='resize', help='Upsampling algorithm.')
-envarg.add_argument("--augmentation", type=bool, default=True, help="Whether or not to use data augmentation.")
-envarg.add_argument("--add_skip_connections", type=bool, default=True, help="Whether or not to add or concatenate the skip connection.")
-envarg.add_argument("--use_skip_connections", type=bool, default=True, help="Whether or not to use skip connection.")
-envarg.add_argument("--subsampling_method", choices=['pooling', 'strided'], default='pooling', help="Method used for dimentionality reduction")
-envarg.add_argument("--aspp_rates", type=list, default=[1,2,3], help="Spatial Pyramid Pooling rates")
-envarg.add_argument("--output_stride", type=int, default=8, help="Spatial Pyramid Pooling rates")
+envarg.add_argument('--starting_learning_rate', type=float, default=0.007, help="initial learning rate.")
+envarg.add_argument("--muiti_grid", type=list, default=[1,2,3], help="Spatial Pyramid Pooling rates")
+envarg.add_argument("--output_stride", type=int, default=16, help="Spatial Pyramid Pooling rates")
 
 envarg.add_argument("--current_best_val_loss", type=int, default=99999, help="Best validation loss value.")
 envarg.add_argument("--accumulated_validation_miou", type=int, default=0, help="Accumulated validation intersection over union.")
 
 dataarg = parser.add_argument_group('Read data')
-dataarg.add_argument("--crop_size", type=float, default=65, help="Crop size for batch train.")
+dataarg.add_argument("--crop_size", type=float, default=513, help="Crop size for batch train.")
 
 trainarg = parser.add_argument_group('Training')
-trainarg.add_argument("--batch_size", type=int, default=96, help="Batch size for network train.")
-trainarg.add_argument("--total_epochs", type=int, default=100, help="Epoch total number for network train.")
+trainarg.add_argument("--batch_size", type=int, default=16, help="Batch size for network train.")
 
 args = parser.parse_args()
 
@@ -93,6 +100,14 @@ validation_iterator = validation_dataset.make_initializable_iterator()
 
 class_labels = [v for v in range((args.number_of_classes+1))]
 class_labels[-1] = 255
+
+# inputs has shape [batch, 513, 513, 3]
+with slim.arg_scope(resnet_v2.resnet_arg_scope()):
+    net, end_points = resnet_v2.resnet_v2_101(inputs,
+                                              21,
+                                              is_training=False,
+                                              global_pool=False,
+                                              output_stride=16)
 
 #logits = dense_segmentation_convnet(batch_images, args, is_training_placeholder)
 logits_train = deeplab_segmentation(batch_images, args, True, reuse=False)
