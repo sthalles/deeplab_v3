@@ -1,20 +1,6 @@
-# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-"""Contains definitions for the preactivation form of Residual Networks.
+"""Contains definitions for the DeepLab_v3 segmentation model.
 
-Residual networks (ResNets) were originally proposed in:
+Residual networks (DeepLab_v3) were originally proposed in:
 [1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
     Deep Residual Learning for Image Recognition. arXiv:1512.03385
 
@@ -30,16 +16,11 @@ Typical use:
 
    from tensorflow.contrib.slim.nets import deeplab_v3
 
-ResNet-101 for image classification into 1000 classes:
 
-   # inputs has shape [batch, 224, 224, 3]
-   with slim.arg_scope(deeplab_v3.resnet_arg_scope()):
-      net, end_points = deeplab_v3.deeplab_v3_101(inputs, 1000, is_training=False)
-
-ResNet-101 for semantic segmentation into 21 classes:
+DeepLab_v3-101 for semantic segmentation into 21 classes:
 
    # inputs has shape [batch, 513, 513, 3]
-   with slim.arg_scope(deeplab_v3.resnet_arg_scope()):
+   with slim.arg_scope(deeplab_v3.deeplab_arg_scope()):
       net, end_points = deeplab_v3.deeplab_v3_101(inputs,
                                                 21,
                                                 is_training=False,
@@ -130,11 +111,11 @@ def atrous_spatial_pyramid_pooling(net, scope, summary=True, depth=256):
 
         at_pool1x1 = slim.conv2d(net, depth, [1, 1], scope="conv_1x1_0", activation_fn=None)
 
-        at_pool3x3_1 = slim.conv2d(net, depth, [3, 3], scope="conv_3x3_1", rate=1, activation_fn=None)
+        at_pool3x3_1 = slim.conv2d(net, depth, [3, 3], scope="conv_3x3_1", rate=6, activation_fn=None)
 
-        at_pool3x3_2 = slim.conv2d(net, depth, [3, 3], scope="conv_3x3_2", rate=2, activation_fn=None)
+        at_pool3x3_2 = slim.conv2d(net, depth, [3, 3], scope="conv_3x3_2", rate=12, activation_fn=None)
 
-        at_pool3x3_3 = slim.conv2d(net, depth, [3, 3], scope="conv_3x3_3", rate=3, activation_fn=None)
+        at_pool3x3_3 = slim.conv2d(net, depth, [3, 3], scope="conv_3x3_3", rate=18, activation_fn=None)
 
         net = tf.concat((image_level_features, at_pool1x1, at_pool3x3_1, at_pool3x3_2, at_pool3x3_3), axis=3,
                         name="concat")
@@ -147,57 +128,42 @@ def atrous_spatial_pyramid_pooling(net, scope, summary=True, depth=256):
 def deeplab_v3(inputs,
                blocks,
                num_classes=None,
+               multi_grid=None,
                is_training=True,
-               global_pool=True,
                output_stride=None,
                include_root_block=True,
-               spatial_squeeze=True,
                initial_output_stride=4,
                reuse=None,
                scope=None):
-  """Generator for v2 (preactivation) ResNet models.
+  """Generator for Deeplab_v3 models.
 
-  This function generates a family of ResNet v2 models. See the deeplab_v3_*()
+  This function generates a family of Deeplab_v3 models. See the deeplab_v3_*()
   methods for specific model instantiations, obtained by selecting different
-  block instantiations that produce ResNets of various depths.
+  block instantiations that produce DeepLab_v3 of various depths.
 
-  Training for image classification on Imagenet is usually done with [224, 224]
-  inputs, resulting in [7, 7] feature maps at the output of the last ResNet
-  block for the ResNets defined in [1] that have nominal stride equal to 32.
-  However, for dense prediction tasks we advise that one uses inputs with
+  For dense prediction tasks we advise that one uses inputs with
   spatial dimensions that are multiples of 32 plus 1, e.g., [321, 321]. In
   this case the feature maps at the ResNet output will have spatial shape
   [(height - 1) / output_stride + 1, (width - 1) / output_stride + 1]
   and corners exactly aligned with the input image corners, which greatly
   facilitates alignment of the features to the image. Using as input [225, 225]
-  images results in [8, 8] feature maps at the output of the last ResNet block.
-
-  For dense prediction tasks, the ResNet needs to run in fully-convolutional
-  (FCN) mode and global_pool needs to be set to False. The ResNets in [1, 2] all
-  have nominal stride equal to 32 and a good choice in FCN mode is to use
-  output_stride=16 in order to increase the density of the computed features at
-  small computational and memory overhead, cf. http://arxiv.org/abs/1606.00915.
+  images results in [8, 8] feature maps at the output of the last Deeplab_v3 block.
 
   Args:
     inputs: A tensor of size [batch, height_in, width_in, channels].
     blocks: A list of length equal to the number of ResNet blocks. Each element
-      is a resnet_utils.Block object describing the units in the block.
+      is a deeplab_utils.Block object describing the units in the block.
     num_classes: Number of predicted classes for classification tasks.
       If 0 or None, we return the features before the logit layer.
+    multi_grid: list of integers containing the atrous convolution rates for the last
+      resnet block.
     is_training: whether batch_norm layers are in train mode.
-    global_pool: If True, we perform global average pooling before computing the
-      logits. Set to True for image classification, False for dense prediction.
     output_stride: If None, then the output will be computed at the nominal
       network stride. If output_stride is not None, it specifies the requested
       ratio of input to output spatial resolution.
     include_root_block: If True, include the initial convolution followed by
       max-pooling, if False excludes it. If excluded, `inputs` should be the
       results of an activation-less convolution.
-    spatial_squeeze: if True, logits is of shape [B, C], if false logits is
-        of shape [B, 1, 1, C], where B is batch_size and C is number of classes.
-        To use this parameter, the input images must be smaller than 300x300
-        pixels, in which case the output logit layer does not contain spatial
-        information and can be removed.
     reuse: whether or not the network and its variables should be reused. To be
       able to reuse 'scope' must be given.
     scope: Optional variable_scope.
@@ -205,12 +171,9 @@ def deeplab_v3(inputs,
 
   Returns:
     net: A rank-4 tensor of size [batch, height_out, width_out, channels_out].
-      If global_pool is False, then height_out and width_out are reduced by a
-      factor of output_stride compared to the respective height_in and width_in,
-      else both height_out and width_out equal one. If num_classes is 0 or None,
-      then net is the output of the last ResNet block, potentially after global
-      average pooling. If num_classes is a non-zero integer, net contains the
-      pre-softmax activations.
+      The original input tensor is reduced by a
+      factor of output_stride compared to the respective height_in and width_in.
+      If num_classes is 0 or None, then net is the output of the last ResNet block.
     end_points: A dictionary from components of the network to the corresponding
       activation.
 
@@ -230,8 +193,7 @@ def deeplab_v3(inputs,
               raise ValueError('The output_stride needs to be a multiple of 4.')
             output_stride /= initial_output_stride
           # We do not include batch normalization or activation functions in
-          # conv1 because the first ResNet unit will perform these. Cf.
-          # Appendix of [2].
+          # conv1 because the first ResNet unit will perform these.
           with slim.arg_scope([slim.conv2d],
                               activation_fn=None, normalizer_fn=None):
             net = deeplab_utils_utils.conv2d_same(net, 64, 7, stride=2, scope='conv1')
@@ -239,29 +201,19 @@ def deeplab_v3(inputs,
           if initial_output_stride == 4:
             net = slim.max_pool2d(net, [3, 3], stride=2, scope='pool1')
 
-        net = deeplab_utils_utils.stack_blocks_dense(net, blocks, output_stride)
-        # This is needed because the pre-activation variant does not have batch
-        # normalization or activation functions in the residual unit output. See
-        # Appendix of [2].
-        #net = slim.batch_norm(net, activation_fn=tf.nn.relu, scope='postnorm')
+        net = deeplab_utils_utils.stack_blocks_dense(net, blocks, multi_grid, output_stride)
 
+        # apply ASPP on top of the last ResNet block
         net = atrous_spatial_pyramid_pooling(net, "aspp_layer1", summary=True, depth=256)
 
         # Convert end_points_collection into a dictionary of end_points.
         end_points = slim.utils.convert_collection_to_dict(
             end_points_collection)
 
-        if global_pool:
-          # Global average pooling.
-          net = tf.reduce_mean(net, [1, 2], name='pool5', keep_dims=True)
-          end_points['global_pool'] = net
         if num_classes is not None:
           net = slim.conv2d(net, num_classes, [1, 1], activation_fn=None,
                             normalizer_fn=None, scope='logits')
           end_points[sc.name + '/logits'] = net
-          if spatial_squeeze:
-            net = tf.squeeze(net, [1, 2], name='SpatialSqueeze')
-            end_points[sc.name + '/spatial_squeeze'] = net
           end_points['predictions'] = slim.softmax(net, scope='predictions')
         return net, end_points
 deeplab_v3.default_image_size = 224
@@ -294,92 +246,41 @@ deeplab_v3.default_image_size = 224
 
 def deeplab_v3_50(inputs,
                   num_classes=None,
+                  multi_grid=[1,2,4],
                   is_training=True,
-                  global_pool=True,
                   output_stride=None,
-                  spatial_squeeze=True,
                   reuse=None,
                   initial_output_stride=4,
                   scope='deeplab_v3_50'):
-  """ResNet-50 model of [1]. See deeplab_v3() for arg and return description."""
+  """Deeplab_v3 model based ResNet-50 model of [1]. See deeplab_v3() for arg and return description."""
   blocks = [
       deeplab_v3_block('block1', base_depth=64, num_units=3, stride=2),
       deeplab_v3_block('block2', base_depth=128, num_units=4, stride=2),
       deeplab_v3_block('block3', base_depth=256, num_units=6, stride=2),
       deeplab_v3_block('block4', base_depth=512, num_units=3, stride=1),
   ]
-  return deeplab_v3(inputs, blocks, num_classes, is_training=is_training,
-                    global_pool=global_pool, output_stride=output_stride,
-                    include_root_block=True, initial_output_stride=initial_output_stride,
-                    spatial_squeeze=spatial_squeeze, reuse=reuse, scope=scope)
+  return deeplab_v3(inputs, blocks, num_classes, multi_grid=multi_grid, is_training=is_training,
+                    output_stride=output_stride, include_root_block=True, initial_output_stride=initial_output_stride,
+                    reuse=reuse, scope=scope)
 deeplab_v3_50.default_image_size = deeplab_v3.default_image_size
 
 
 def deeplab_v3_101(inputs,
                    num_classes=None,
+                   multi_grid=[1,2,4],
                    is_training=True,
-                   global_pool=True,
                    output_stride=None,
-                   spatial_squeeze=True,
                    initial_output_stride=4,
                    reuse=None,
                    scope='deeplab_v3_101'):
-  """ResNet-101 model of [1]. See deeplab_v3() for arg and return description."""
+  """Deeplab_v3 model based on ResNet-101 model of [1]. See deeplab_v3() for arg and return description."""
   blocks = [
       deeplab_v3_block('block1', base_depth=64, num_units=3, stride=2),
       deeplab_v3_block('block2', base_depth=128, num_units=4, stride=2),
       deeplab_v3_block('block3', base_depth=256, num_units=23, stride=2),
       deeplab_v3_block('block4', base_depth=512, num_units=3, stride=1),
   ]
-  return deeplab_v3(inputs, blocks, num_classes, is_training=is_training,
-                    global_pool=global_pool, output_stride=output_stride,
-                    include_root_block=True, initial_output_stride=initial_output_stride,
-                    spatial_squeeze=spatial_squeeze,
+  return deeplab_v3(inputs, blocks, num_classes, multi_grid=multi_grid, is_training=is_training,
+                    output_stride=output_stride, include_root_block=True, initial_output_stride=initial_output_stride,
                     reuse=reuse, scope=scope)
 deeplab_v3_101.default_image_size = deeplab_v3.default_image_size
-
-
-def deeplab_v3_152(inputs,
-                  num_classes=None,
-                  is_training=True,
-                  global_pool=True,
-                  output_stride=None,
-                  spatial_squeeze=True,
-                  reuse=None,
-                  initial_output_stride=4,
-                  scope='deeplab_v3_152'):
-  """ResNet-152 model of [1]. See deeplab_v3() for arg and return description."""
-  blocks = [
-      deeplab_v3_block('block1', base_depth=64, num_units=3, stride=2),
-      deeplab_v3_block('block2', base_depth=128, num_units=8, stride=2),
-      deeplab_v3_block('block3', base_depth=256, num_units=36, stride=2),
-      deeplab_v3_block('block4', base_depth=512, num_units=3, stride=1),
-  ]
-  return deeplab_v3(inputs, blocks, num_classes, is_training=is_training,
-                    global_pool=global_pool, output_stride=output_stride,
-                    include_root_block=True, initial_output_stride=initial_output_stride,
-                    spatial_squeeze=spatial_squeeze, reuse=reuse, scope=scope)
-deeplab_v3_152.default_image_size = deeplab_v3.default_image_size
-
-
-def deeplab_v3_200(inputs,
-                  num_classes=None,
-                  is_training=True,
-                  global_pool=True,
-                  output_stride=None,
-                  spatial_squeeze=True,
-                  reuse=None,
-                  initial_output_stride=4,
-                  scope='deeplab_v3_200'):
-  """ResNet-200 model of [2]. See deeplab_v3() for arg and return description."""
-  blocks = [
-      deeplab_v3_block('block1', base_depth=64, num_units=3, stride=2),
-      deeplab_v3_block('block2', base_depth=128, num_units=24, stride=2),
-      deeplab_v3_block('block3', base_depth=256, num_units=36, stride=2),
-      deeplab_v3_block('block4', base_depth=512, num_units=3, stride=1),
-  ]
-  return deeplab_v3(inputs, blocks, num_classes, is_training=is_training,
-                    global_pool=global_pool, output_stride=output_stride,
-                    include_root_block=True, spatial_squeeze=spatial_squeeze,
-                    initial_output_stride=initial_output_stride, reuse=reuse, scope=scope)
-deeplab_v3_200.default_image_size = deeplab_v3.default_image_size

@@ -7,10 +7,10 @@ import numpy as np
 slim = tf.contrib.slim
 import os
 import json
-from preprocessing import random_flip_image_and_annotation
-from preprocessing import distort_randomly_image_color
+#from preprocessing import random_flip_image_and_annotation
+# from preprocessing import distort_randomly_image_color
 from shutil import copyfile
-
+from deeplab import deeplab_v3
 
 # 0=background
 # 1=aeroplane
@@ -38,7 +38,7 @@ from shutil import copyfile
 os.environ["CUDA_VISIBLE_DEVICES"]="3"
 parser = argparse.ArgumentParser()
 
-envarg = parser.add_argument_group('Model')
+envarg = parser.add_argument_group('Training params')
 envarg.add_argument("--batch_norm_epsilon", type=float, default=1e-5, help="batch norm epsilon argument for batch normalization")
 envarg.add_argument('--batch_norm_decay', type=float, default=0.9997, help='batch norm decay argument for batch normalization.')
 envarg.add_argument("--number_of_classes", type=int, default=21, help="Number of classes to be predicted.")
@@ -101,13 +101,7 @@ validation_iterator = validation_dataset.make_initializable_iterator()
 class_labels = [v for v in range((args.number_of_classes+1))]
 class_labels[-1] = 255
 
-# inputs has shape [batch, 513, 513, 3]
-with slim.arg_scope(resnet_v2.resnet_arg_scope()):
-    net, end_points = resnet_v2.resnet_v2_101(inputs,
-                                              21,
-                                              is_training=False,
-                                              global_pool=False,
-                                              output_stride=16)
+
 
 #logits = dense_segmentation_convnet(batch_images, args, is_training_placeholder)
 logits_train = deeplab_segmentation(batch_images, args, True, reuse=False)
