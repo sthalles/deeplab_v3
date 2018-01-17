@@ -33,10 +33,10 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-from deeplab import deeplab_utils_utils
+from deeplab import deeplab_utils
 
 slim = tf.contrib.slim
-deeplab_arg_scope = deeplab_utils_utils.deeplab_arg_scope
+deeplab_arg_scope = deeplab_utils.deeplab_arg_scope
 
 
 @slim.add_arg_scope
@@ -68,7 +68,7 @@ def bottleneck(inputs, depth, depth_bottleneck, stride, rate=1,
     depth_in = slim.utils.last_dimension(inputs.get_shape(), min_rank=4)
     preact = slim.batch_norm(inputs, activation_fn=tf.nn.relu, scope='preact')
     if depth == depth_in:
-      shortcut = deeplab_utils_utils.subsample(inputs, stride, 'shortcut')
+      shortcut = deeplab_utils.subsample(inputs, stride, 'shortcut')
     else:
       shortcut = slim.conv2d(preact, depth, [1, 1], stride=stride,
                              normalizer_fn=None, activation_fn=None,
@@ -76,8 +76,8 @@ def bottleneck(inputs, depth, depth_bottleneck, stride, rate=1,
 
     residual = slim.conv2d(preact, depth_bottleneck, [1, 1], stride=1,
                            scope='conv1')
-    residual = deeplab_utils_utils.conv2d_same(residual, depth_bottleneck, 3, stride,
-                                               rate=rate, scope='conv2')
+    residual = deeplab_utils.conv2d_same(residual, depth_bottleneck, 3, stride,
+                                         rate=rate, scope='conv2')
     residual = slim.conv2d(residual, depth, [1, 1], stride=1,
                            normalizer_fn=None, activation_fn=None,
                            scope='conv3')
@@ -90,13 +90,12 @@ def bottleneck(inputs, depth, depth_bottleneck, stride, rate=1,
 
 
 @slim.add_arg_scope
-def atrous_spatial_pyramid_pooling(net, scope, summary=True, depth=256):
+def atrous_spatial_pyramid_pooling(net, scope, depth=256):
     """
     ASPP consists of (a) one 1×1 convolution and three 3×3 convolutions with rates = (6, 12, 18) when output stride = 16
     (all with 256 filters and batch normalization), and (b) the image-level features as described in https://arxiv.org/abs/1706.05587
-    :param net: network tensor of shape [BATCH_SIZE, WIDTH, HEIGHT, DEPTH]
+    :param net: tensor of shape [BATCH_SIZE, WIDTH, HEIGHT, DEPTH]
     :param scope: scope name of the aspp layer
-    :param summary: output tensorboard summary statistics
     :return: network layer with aspp applyed to it.
     """
 
@@ -105,7 +104,7 @@ def atrous_spatial_pyramid_pooling(net, scope, summary=True, depth=256):
 
         # apply global average pooling
         image_level_features = tf.reduce_mean(net, [1, 2], name='image_level_global_pool', keep_dims=True)
-        image_level_features = slim.conv2d(image_level_features, depth, [1, 1], scope="image_level_global_poolconv_1x1",
+        image_level_features = slim.conv2d(image_level_features, depth, [1, 1], scope="image_level_conv_1x1",
                                            activation_fn=None)
         image_level_features = tf.image.resize_bilinear(image_level_features, (feature_map_size[1], feature_map_size[2]))
 
@@ -120,8 +119,6 @@ def atrous_spatial_pyramid_pooling(net, scope, summary=True, depth=256):
         net = tf.concat((image_level_features, at_pool1x1, at_pool3x3_1, at_pool3x3_2, at_pool3x3_3), axis=3,
                         name="concat")
         net = slim.conv2d(net, depth, [1, 1], scope="conv_1x1_output", activation_fn=None)
-        if summary:
-            tf.summary.image("net", net[:, :, :, :1], 1)
         return net
 
 
@@ -132,7 +129,6 @@ def deeplab_v3(inputs,
                is_training=True,
                output_stride=None,
                include_root_block=True,
-               initial_output_stride=4,
                reuse=None,
                scope=None):
   """Generator for Deeplab_v3 models.
@@ -181,38 +177,40 @@ def deeplab_v3(inputs,
     ValueError: If the target output_stride is not valid.
   """
   with tf.variable_scope(scope, 'deeplab_v3', [inputs], reuse=reuse) as sc:
+    size = tf.shape(inputs)[1:3]
     end_points_collection = sc.original_name_scope + '_end_points'
     with slim.arg_scope([slim.conv2d, bottleneck,
-                         deeplab_utils_utils.stack_blocks_dense],
+                         deeplab_utils.stack_blocks_dense],
                         outputs_collections=end_points_collection):
       with slim.arg_scope([slim.batch_norm], is_training=is_training):
         net = inputs
         if include_root_block:
           if output_stride is not None:
-            if output_stride % initial_output_stride != 0:
+            if output_stride % 4 != 0:
               raise ValueError('The output_stride needs to be a multiple of 4.')
-            output_stride /= initial_output_stride
+            output_stride /= 4
           # We do not include batch normalization or activation functions in
           # conv1 because the first ResNet unit will perform these.
           with slim.arg_scope([slim.conv2d],
                               activation_fn=None, normalizer_fn=None):
-            net = deeplab_utils_utils.conv2d_same(net, 64, 7, stride=2, scope='conv1')
+            net = deeplab_utils.conv2d_same(net, 64, 7, stride=2, scope='conv1')
+          net = slim.max_pool2d(net, [3, 3], stride=2, scope='pool1')
 
-          if initial_output_stride == 4:
-            net = slim.max_pool2d(net, [3, 3], stride=2, scope='pool1')
-
-        net = deeplab_utils_utils.stack_blocks_dense(net, blocks, multi_grid, output_stride)
+        net = deeplab_utils.stack_blocks_dense(net, blocks, multi_grid, output_stride)
 
         # apply ASPP on top of the last ResNet block
-        net = atrous_spatial_pyramid_pooling(net, "aspp_layer1", summary=True, depth=256)
+        net = atrous_spatial_pyramid_pooling(net, "aspp_layer", depth=256)
 
         # Convert end_points_collection into a dictionary of end_points.
-        end_points = slim.utils.convert_collection_to_dict(
-            end_points_collection)
+        end_points = slim.utils.convert_collection_to_dict(end_points_collection)
 
         if num_classes is not None:
           net = slim.conv2d(net, num_classes, [1, 1], activation_fn=None,
                             normalizer_fn=None, scope='logits')
+
+          # Resize the logits to its original size
+          # net = tf.image.resize_nearest_neighbor(net, size)
+
           end_points[sc.name + '/logits'] = net
           end_points['predictions'] = slim.softmax(net, scope='predictions')
         return net, end_points
@@ -232,7 +230,7 @@ def deeplab_v3_block(scope, base_depth, num_units, stride, factor=1):
   Returns:
     A deeplab_v3 bottleneck block.
   """
-  return deeplab_utils_utils.Block(scope, bottleneck, [{
+  return deeplab_utils.Block(scope, bottleneck, [{
       'depth': base_depth * factor,
       'depth_bottleneck': base_depth,
       'stride': 1
@@ -250,7 +248,6 @@ def deeplab_v3_50(inputs,
                   is_training=True,
                   output_stride=None,
                   reuse=None,
-                  initial_output_stride=4,
                   scope='deeplab_v3_50'):
   """Deeplab_v3 model based ResNet-50 model of [1]. See deeplab_v3() for arg and return description."""
   blocks = [
@@ -260,7 +257,7 @@ def deeplab_v3_50(inputs,
       deeplab_v3_block('block4', base_depth=512, num_units=3, stride=1),
   ]
   return deeplab_v3(inputs, blocks, num_classes, multi_grid=multi_grid, is_training=is_training,
-                    output_stride=output_stride, include_root_block=True, initial_output_stride=initial_output_stride,
+                    output_stride=output_stride, include_root_block=True,
                     reuse=reuse, scope=scope)
 deeplab_v3_50.default_image_size = deeplab_v3.default_image_size
 
@@ -270,7 +267,6 @@ def deeplab_v3_101(inputs,
                    multi_grid=[1,2,4],
                    is_training=True,
                    output_stride=None,
-                   initial_output_stride=4,
                    reuse=None,
                    scope='deeplab_v3_101'):
   """Deeplab_v3 model based on ResNet-101 model of [1]. See deeplab_v3() for arg and return description."""
@@ -281,6 +277,6 @@ def deeplab_v3_101(inputs,
       deeplab_v3_block('block4', base_depth=512, num_units=3, stride=1),
   ]
   return deeplab_v3(inputs, blocks, num_classes, multi_grid=multi_grid, is_training=is_training,
-                    output_stride=output_stride, include_root_block=True, initial_output_stride=initial_output_stride,
+                    output_stride=output_stride, include_root_block=True,
                     reuse=reuse, scope=scope)
 deeplab_v3_101.default_image_size = deeplab_v3.default_image_size

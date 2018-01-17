@@ -10,7 +10,7 @@ import json
 #from preprocessing import random_flip_image_and_annotation
 # from preprocessing import distort_randomly_image_color
 from shutil import copyfile
-from deeplab import deeplab_v3
+from resnet import resnet_v3
 
 # 0=background
 # 1=aeroplane
