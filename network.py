@@ -1,6 +1,7 @@
 import tensorflow as tf
 slim = tf.contrib.slim
 from resnet import resnet_v2, resnet_utils
+from preprocessing import training
 
 # ImageNet mean statistics
 _R_MEAN = 123.68
@@ -46,7 +47,9 @@ def densenet(inputs, args, is_training, reuse):
     inputs = inputs - [_R_MEAN, _G_MEAN, _B_MEAN]
 
     # inputs has shape [batch, 513, 513, 3]
-    with slim.arg_scope(resnet_utils.resnet_arg_scope(args.l2_regularizer, args.batch_norm_decay, args.batch_norm_epsilon)):
+    with slim.arg_scope(resnet_utils.resnet_arg_scope(args.l2_regularizer, is_training,
+                                                      args.batch_norm_decay,
+                                                      args.batch_norm_epsilon)):
         _, end_points = resnet_v2.resnet_v2_50(inputs,
                                                args.number_of_classes,
                                                is_training=is_training,
@@ -54,31 +57,36 @@ def densenet(inputs, args, is_training, reuse):
                                                spatial_squeeze=False,
                                                output_stride=16,
                                                reuse=reuse)
-        # get block 4 feature outputs
-        net = end_points['resnet_v2_50/block4']
 
-    with tf.variable_scope("DeepLab_v3", reuse=reuse):
+        with tf.variable_scope("DeepLab_v3", reuse=reuse):
 
-        net = atrous_spatial_pyramid_pooling(net, "ASPP_layer", depth=256, reuse=reuse)
+            # get block 4 feature outputs
+            net = end_points['resnet_v2_50/block4']
 
-        net = slim.conv2d(net, args.number_of_classes, [1, 1], activation_fn=None,
-                          normalizer_fn=None, scope='logits')
+            net = atrous_spatial_pyramid_pooling(net, "ASPP_layer", depth=256, reuse=reuse)
 
-        size = tf.shape(inputs)[1:3]
-        # resize the output logits to match the labels dimensions
-        net = tf.image.resize_nearest_neighbor(net, size)
-        return net
+            net = slim.conv2d(net, args.number_of_classes, [1, 1], activation_fn=None,
+                              normalizer_fn=None, scope='logits')
+
+            size = tf.shape(inputs)[1:3]
+            # resize the output logits to match the labels dimensions
+            net = tf.image.resize_nearest_neighbor(net, size)
+            return net
 
 
-def model_loss(logits, valid_logits, valid_labels):
+def model_loss(logits, labels, class_labels):
 
-    cross_entropies = tf.nn.softmax_cross_entropy_with_logits(logits=valid_logits,
-                                                              labels=valid_labels)
+    valid_labels_batch_tensor, valid_logits_batch_tensor = training.get_valid_logits_and_labels(
+        annotation_batch_tensor=labels,
+        logits_batch_tensor=logits,
+        class_labels=class_labels)
+
+    cross_entropies = tf.nn.softmax_cross_entropy_with_logits(logits=valid_logits_batch_tensor,
+                                                              labels=valid_labels_batch_tensor)
 
     cross_entropy_mean = tf.reduce_mean(cross_entropies)
 
     pred = tf.argmax(logits, axis=3)
 
-    probabilities = tf.nn.softmax(logits)
-    return cross_entropy_mean, pred, probabilities
+    return cross_entropy_mean, pred
 

@@ -36,7 +36,7 @@ def tf_record_parser(record):
     annotation_additional_mask_out = tf.to_int32(tf.equal(cropped_padded_annotation, 0)) * (mask_out_number + 1)
     cropped_padded_annotation = cropped_padded_annotation + annotation_additional_mask_out - 1
 
-    return tf.squeeze(image_croped), tf.squeeze(cropped_padded_annotation)
+    return tf.squeeze(image_croped), tf.squeeze(tf.cast(cropped_padded_annotation, tf.uint8))
 
 def rescale_image_and_annotation_and_crop(image, annotation, nin_scale=0.5, max_scale=2):
     # We apply data augmentation by randomly scaling theinput images(from 0.5 to 2.0)

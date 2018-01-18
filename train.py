@@ -9,7 +9,7 @@ import network
 from preprocessing.training import random_flip_image_and_annotation
 from preprocessing.read_data import tf_record_parser
 import matplotlib.pyplot as plt
-from preprocessing import training
+
 
 # 0=background
 # 1=aeroplane
@@ -42,7 +42,7 @@ envarg.add_argument("--batch_norm_epsilon", type=float, default=1e-5, help="batc
 envarg.add_argument('--batch_norm_decay', type=float, default=0.9997, help='batch norm decay argument for batch normalization.')
 envarg.add_argument("--number_of_classes", type=int, default=21, help="Number of classes to be predicted.")
 envarg.add_argument("--l2_regularizer", type=float, default=0.0001, help="l2 regularizer parameter.")
-envarg.add_argument('--starting_learning_rate', type=float, default=0.000000001, help="initial learning rate.")
+envarg.add_argument('--starting_learning_rate', type=float, default=0.0001, help="initial learning rate.")
 envarg.add_argument("--multi_grid", type=list, default=[1,2,4], help="Spatial Pyramid Pooling rates")
 envarg.add_argument("--output_stride", type=int, default=16, help="Spatial Pyramid Pooling rates")
 
@@ -93,18 +93,13 @@ class_labels[-1] = 255
 
 is_training = tf.placeholder(tf.bool, shape=[])
 
-#logits = network.densenet(batch_images, args, is_training=True, reuse=tf.AUTO_REUSE)
-
 logits = tf.cond(is_training, true_fn=lambda: network.densenet(batch_images, args, is_training=True, reuse=False),
                               false_fn=lambda: network.densenet(batch_images, args, is_training=False, reuse=True))
 
-valid_labels_batch_tensor, valid_logits_batch_tensor = training.get_valid_logits_and_labels(
-    annotation_batch_tensor=batch_labels,
-    logits_batch_tensor=logits,
-    class_labels=class_labels)
+tf.summary.image("logits", logits[:, :, :, :3], 1)
 
 # get the error and predictions from the network
-cross_entropy, pred, probabilities = network.model_loss(logits, valid_logits_batch_tensor, valid_labels_batch_tensor)
+cross_entropy, pred = network.model_loss(logits, batch_labels, class_labels)
 
 tf.summary.scalar('cross_entropy', cross_entropy)
 tf.summary.image("prediction", tf.expand_dims(tf.cast(pred, tf.float32),3), 1)
@@ -166,36 +161,40 @@ with tf.Session() as sess:
 
     sess.run(training_iterator.initializer)
 
-    accumulated_validation_loss = []
-    accumulated_validation_miou = []
+    accumulated_validation_loss = 0
+    accumulated_validation_miou = 0
+    accumulated_train_loss = 0
 
+    train_steps_before_eval = 100
+    validation_steps = 20
     while True:
         accumulated_train_loss = []
-        for i in range(1): # run this number of batches before validation
+        for i in range(train_steps_before_eval): # run this number of batches before validation
             _, global_step_np, train_loss, summary_string = sess.run([train_step,
                                                                                 global_step, cross_entropy,
                                                                                 merged_summary_op],
                                                                                 feed_dict={is_training:True,
                                                                                            handle: training_handle})
-            accumulated_train_loss.append(train_loss)
+            accumulated_train_loss += train_loss
             train_writer.add_summary(summary_string, global_step_np)
 
+        accumulated_train_loss/=train_steps_before_eval
 
         # at the end of each train interval, run validation
         sess.run(validation_iterator.initializer)
 
-        for i in range(20):
+        for i in range(validation_steps):
             val_loss, summary_string, _ = sess.run([cross_entropy, merged_summary_op, update_op],
                                                                 feed_dict={handle: validation_handle,
                                                                            is_training:False})
 
             miou_np = sess.run(miou)
-            accumulated_validation_miou.append(miou_np)
-            accumulated_validation_loss.append(val_loss)
+            accumulated_validation_miou+=miou_np
+            accumulated_validation_loss+=val_loss
 
         # keep running average of the miou and validation loss
-        mean_accumulated_val_loss = np.mean(accumulated_validation_loss)
-        mean_accumulated_val_miou = np.mean(accumulated_validation_miou)
+        mean_accumulated_val_loss = accumulated_validation_miou/validation_steps
+        mean_accumulated_val_miou = accumulated_validation_loss/validation_steps
 
         if mean_accumulated_val_loss < current_best_val_loss:
             # Save the variables to disk.
@@ -204,8 +203,11 @@ with tf.Session() as sess:
             current_best_val_loss = mean_accumulated_val_loss
 
             # update metadata and save it
-            args.current_best_val_loss = current_best_val_loss
-            args.accumulated_validation_miou = mean_accumulated_val_miou
+            args.current_best_val_loss = str(current_best_val_loss)
+            args.accumulated_validation_miou = str(mean_accumulated_val_miou)
+
+            with open(LOG_FOLDER + "/train/" + 'data.json', 'w') as fp:
+                json.dump(args.__dict__, fp, sort_keys=True, indent=4)
 
         print("Global step:", global_step_np, "Average train loss:",
               np.mean(accumulated_train_loss), "\tValidation average Loss:",

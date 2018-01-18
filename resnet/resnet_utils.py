@@ -202,6 +202,7 @@ def stack_blocks_dense(net, blocks, multi_grid, output_stride=None,
 
 
 def resnet_arg_scope(weight_decay=0.0001,
+                     is_training=True,
                      batch_norm_decay=0.997,
                      batch_norm_epsilon=1e-5,
                      batch_norm_scale=True,
@@ -232,7 +233,8 @@ def resnet_arg_scope(weight_decay=0.0001,
       'decay': batch_norm_decay,
       'epsilon': batch_norm_epsilon,
       'scale': batch_norm_scale,
-      'updates_collections': tf.GraphKeys.UPDATE_OPS,
+      'updates_collections': None,
+      'is_training': is_training,
       'fused': None,  # Use fused batch norm if possible.
   }
 
