@@ -171,7 +171,7 @@ def stack_blocks_dense(net, blocks, multi_grid, output_stride=None,
             # Only uses atrous convolutions with multi-graid rates in the last (block4) block
             if block.scope == "block4":
               net = block.unit_fn(net, rate=rate * multi_grid[i], **dict(unit, stride=1))
-              print("Atrous rate:", rate * multi_grid[i])
+              print("Atrous rate for last block:", rate * multi_grid[i])
             else:
               net = block.unit_fn(net, rate=rate, **dict(unit, stride=1))
             rate *= unit.get('stride', 1)

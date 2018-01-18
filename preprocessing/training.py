@@ -1,71 +1,49 @@
-import numpy as np
 import tensorflow as tf
+from tensorflow.python.ops import control_flow_ops
+slim = tf.contrib.slim
 
 
-def tf_record_parser(record):
-    keys_to_features = {
-        "image_raw": tf.FixedLenFeature((), tf.string, default_value=""),
-        'annotation_raw': tf.FixedLenFeature([], tf.string),
-        "height": tf.FixedLenFeature((), tf.int64),
-        "width": tf.FixedLenFeature((), tf.int64)
-    }
+def random_flip_image_and_annotation(image_tensor, annotation_tensor):
+    """Accepts image tensor and annotation tensor and returns randomly flipped tensors of both.
+    The function performs random flip of image and annotation tensors with probability of 1/2
+    The flip is performed or not performed for image and annotation consistently, so that
+    annotation matches the image.
 
-    features = tf.parse_single_example(record, keys_to_features)
+    Parameters
+    ----------
+    image_tensor : Tensor of size (width, height, 3)
+        Tensor with image
+    annotation_tensor : Tensor of size (width, height, 1)
+        Tensor with annotation
 
-    image = tf.decode_raw(features['image_raw'], tf.float32)
-    annotation = tf.decode_raw(features['annotation_raw'], tf.uint8)
+    Returns
+    -------
+    randomly_flipped_img : Tensor of size (width, height, 3) of type tf.float.
+        Randomly flipped image tensor
+    randomly_flipped_annotation : Tensor of size (width, height, 1)
+        Randomly flipped annotation tensor
 
-    height = tf.cast(features['height'], tf.int32)
-    width = tf.cast(features['width'], tf.int32)
+    """
+    original_shape = tf.shape(annotation_tensor)
+    # ensure the annotation tensor has shape (width, height, 1)
+    annotation_tensor = tf.cond(tf.rank(annotation_tensor) < 3,
+                                lambda: tf.expand_dims(annotation_tensor, axis=2),
+                                lambda: annotation_tensor)
 
-    image = tf.reshape(image, (height, width, 3), name="image_reshape")
-    annotation = tf.reshape(annotation, (height, width, 1), name="annotation_reshape")
-    annotation = tf.to_int32(annotation)
+    # Random variable: two possible outcomes (0 or 1)
+    # with a 1 in 2 chance
+    random_var = tf.random_uniform(maxval=2, dtype=tf.int32, shape=[])
 
-    #We apply data augmentation by randomly scaling theinput images(from 0.5 to 2.0)
-    #and randomly left - right flipping during training.
 
-    # Get height and width tensors
-    input_shape = tf.shape(image)[1:3]
-    input_shape_float = tf.to_float(input_shape)
-    scale = tf.random_uniform([1], minval=0.5, maxval=2, dtype=tf.float32)
-    scaled_shape = tf.cast(scale * input_shape_float, tf.int32)
-    image = tf.image.resize_bilinear(tf.expand_dims(image, axis=0), scaled_shape)
-    annotation = tf.image.resize_nearest_neighbor(tf.expand_dims(annotation,axis=0), scaled_shape)
+    randomly_flipped_img = tf.cond(pred=tf.equal(random_var, 0),
+                                                 true_fn=lambda: tf.image.flip_left_right(image_tensor),
+                                                 false_fn=lambda: image_tensor)
 
-    image_croped = tf.image.resize_image_with_crop_or_pad(image, 513, 513)
+    randomly_flipped_annotation = tf.cond(pred=tf.equal(random_var, 0),
+                                                        true_fn=lambda: tf.image.flip_left_right(annotation_tensor),
+                                                        false_fn=lambda: annotation_tensor)
 
-    # Shift all the classes by one -- to be able to differentiate
-    # between zeros representing padded values and zeros representing
-    # a particular semantic class.
-    annotation_shifted_classes = annotation + 1
-
-    cropped_padded_annotation = tf.image.resize_image_with_crop_or_pad(annotation_shifted_classes, 513, 513)
-
-    mask_out_number = 255
-    annotation_additional_mask_out = tf.to_int32(tf.equal(cropped_padded_annotation, 0)) * (mask_out_number + 1)
-    cropped_padded_annotation = cropped_padded_annotation + annotation_additional_mask_out - 1
-
-    return tf.squeeze(image_croped)/255., tf.squeeze(cropped_padded_annotation)
-
-def cutout(image, label):
-    cutout_shape = [24,24]
-    original_image_shape = tf.shape(image)
-    def random_cutout(image):
-        center_x = np.random.randint(0, image.shape[0])
-        center_y = np.random.randint(0, image.shape[0])
-
-        # check boundaries conditions
-        from_x = center_x-cutout_shape[0]//2 if center_x-cutout_shape[0]//2 > 0 else 0
-        to_x = image.shape[0] if (center_x+cutout_shape[0]//2) > image.shape[0] else center_x+cutout_shape[0]//2
-
-        from_y = center_y-cutout_shape[0]//2 if center_y-cutout_shape[0]//2 > 0 else 0
-        to_y = image.shape[1] if (center_y+cutout_shape[0]//2) > image.shape[1] else center_y+cutout_shape[1]//2
-
-        image[from_x:to_x,from_y:to_y] = 0
-        return image
-
-    return tf.reshape(tf.py_func(random_cutout, [image], (image.dtype)), original_image_shape), label
+    return randomly_flipped_img, tf.reshape(randomly_flipped_annotation, original_shape)
 
 def get_labels_from_annotation(annotation_tensor, class_labels):
     """Returns tensor of size (width, height, num_classes) derived from annotation tensor.
@@ -100,8 +78,8 @@ def get_labels_from_annotation(annotation_tensor, class_labels):
     valid_entries_class_labels = class_labels[:-1]
 
     # Stack the binary masks for each class
-    labels_2d = map(lambda x: tf.equal(annotation_tensor, x),
-                    valid_entries_class_labels)
+    labels_2d = list(map(lambda x: tf.equal(annotation_tensor, x),
+                    valid_entries_class_labels))
 
     # Perform the merging of all of the binary masks into one matrix
     labels_2d_stacked = tf.stack(labels_2d, axis=2)
@@ -113,6 +91,8 @@ def get_labels_from_annotation(annotation_tensor, class_labels):
     labels_2d_stacked_float = tf.to_float(labels_2d_stacked)
 
     return labels_2d_stacked_float
+
+
 
 
 def get_labels_from_annotation_batch(annotation_batch_tensor, class_labels):
@@ -146,6 +126,9 @@ def get_labels_from_annotation_batch(annotation_batch_tensor, class_labels):
                              dtype=tf.float32)
 
     return batch_labels
+
+
+
 
 
 def get_valid_entries_indices_from_annotation_batch(annotation_batch_tensor, class_labels):

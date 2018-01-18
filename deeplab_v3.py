@@ -33,7 +33,7 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-from deeplab import deeplab_utils
+import deeplab_utils
 
 slim = tf.contrib.slim
 deeplab_arg_scope = deeplab_utils.deeplab_arg_scope
@@ -177,7 +177,7 @@ def deeplab_v3(inputs,
     ValueError: If the target output_stride is not valid.
   """
   with tf.variable_scope(scope, 'deeplab_v3', [inputs], reuse=reuse) as sc:
-    size = tf.shape(inputs)[1:3]
+
     end_points_collection = sc.original_name_scope + '_end_points'
     with slim.arg_scope([slim.conv2d, bottleneck,
                          deeplab_utils.stack_blocks_dense],
@@ -207,9 +207,6 @@ def deeplab_v3(inputs,
         if num_classes is not None:
           net = slim.conv2d(net, num_classes, [1, 1], activation_fn=None,
                             normalizer_fn=None, scope='logits')
-
-          # Resize the logits to its original size
-          # net = tf.image.resize_nearest_neighbor(net, size)
 
           end_points[sc.name + '/logits'] = net
           end_points['predictions'] = slim.softmax(net, scope='predictions')
