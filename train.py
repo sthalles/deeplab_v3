@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 # 20=tv/monitor
 # 255=unknown
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
 parser = argparse.ArgumentParser()
 
 envarg = parser.add_argument_group('Training params')
@@ -45,6 +45,7 @@ envarg.add_argument("--l2_regularizer", type=float, default=0.0001, help="l2 reg
 envarg.add_argument('--starting_learning_rate', type=float, default=0.0001, help="initial learning rate.")
 envarg.add_argument("--multi_grid", type=list, default=[1,2,4], help="Spatial Pyramid Pooling rates")
 envarg.add_argument("--output_stride", type=int, default=16, help="Spatial Pyramid Pooling rates")
+envarg.add_argument("--gpu_id", type=int, default=0, help="Id of the GPU to be used")
 
 envarg.add_argument("--current_best_val_loss", type=int, default=99999, help="Best validation loss value.")
 envarg.add_argument("--accumulated_validation_miou", type=int, default=0, help="Accumulated validation intersection over union.")
@@ -53,6 +54,7 @@ trainarg = parser.add_argument_group('Training')
 trainarg.add_argument("--batch_size", type=int, default=16, help="Batch size for network train.")
 
 args = parser.parse_args()
+os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu_id)
 
 LOG_FOLDER = './tboard_logs'
 TRAIN_DATASET_DIR="./dataset/"
@@ -161,14 +163,13 @@ with tf.Session() as sess:
 
     sess.run(training_iterator.initializer)
 
-    accumulated_validation_loss = 0
-    accumulated_validation_miou = 0
-    accumulated_train_loss = 0
+    validation_running_loss = []
+    validation_running_miou = []
 
-    train_steps_before_eval = 100
+    train_steps_before_eval = 20
     validation_steps = 20
     while True:
-        accumulated_train_loss = []
+        accumulated_train_loss = 0
         for i in range(train_steps_before_eval): # run this number of batches before validation
             _, global_step_np, train_loss, summary_string = sess.run([train_step,
                                                                                 global_step, cross_entropy,
@@ -183,35 +184,43 @@ with tf.Session() as sess:
         # at the end of each train interval, run validation
         sess.run(validation_iterator.initializer)
 
+        validation_average_loss = 0
+        validation_average_miou = 0
         for i in range(validation_steps):
             val_loss, summary_string, _ = sess.run([cross_entropy, merged_summary_op, update_op],
                                                                 feed_dict={handle: validation_handle,
                                                                            is_training:False})
 
             miou_np = sess.run(miou)
-            accumulated_validation_miou+=miou_np
-            accumulated_validation_loss+=val_loss
+            validation_average_miou+=miou_np
+            validation_average_loss+=val_loss
+
+        validation_average_loss/=validation_steps
+        validation_average_miou/=validation_steps
 
         # keep running average of the miou and validation loss
-        mean_accumulated_val_loss = accumulated_validation_miou/validation_steps
-        mean_accumulated_val_miou = accumulated_validation_loss/validation_steps
+        validation_running_loss.append(validation_average_loss)
+        validation_running_miou.append(validation_average_miou)
 
-        if mean_accumulated_val_loss < current_best_val_loss:
+        validation_global_loss = np.mean(validation_running_loss)
+        validation_global_miou = np.mean(validation_running_miou)
+
+        if validation_global_loss < current_best_val_loss:
             # Save the variables to disk.
             save_path = saver.save(sess, LOG_FOLDER + "/train" + "/model.ckpt")
-            print("Model checkpoints written! Best average val loss:", mean_accumulated_val_loss)
-            current_best_val_loss = mean_accumulated_val_loss
+            print("Model checkpoints written! Best average val loss:", validation_global_loss)
+            current_best_val_loss = validation_global_loss
 
             # update metadata and save it
             args.current_best_val_loss = str(current_best_val_loss)
-            args.accumulated_validation_miou = str(mean_accumulated_val_miou)
+            args.accumulated_validation_miou = str(validation_global_miou)
 
             with open(LOG_FOLDER + "/train/" + 'data.json', 'w') as fp:
                 json.dump(args.__dict__, fp, sort_keys=True, indent=4)
 
         print("Global step:", global_step_np, "Average train loss:",
-              np.mean(accumulated_train_loss), "\tValidation average Loss:",
-              mean_accumulated_val_loss, "\tAverage mIOU:", mean_accumulated_val_miou)
+              accumulated_train_loss, "\tGlobal Validation Avg Loss:",
+              validation_global_loss, "\tGlobal Avg mIOU:", validation_global_miou)
 
         test_writer.add_summary(summary_string, global_step_np)
 
