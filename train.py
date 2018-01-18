@@ -7,7 +7,7 @@ import os
 import json
 import network
 from preprocessing.training import random_flip_image_and_annotation
-from preprocessing.read_data import tf_record_parser, rescale_image_and_annotation_and_crop
+from preprocessing.read_data import tf_record_parser
 import matplotlib.pyplot as plt
 from preprocessing import training
 
@@ -42,7 +42,7 @@ envarg.add_argument("--batch_norm_epsilon", type=float, default=1e-5, help="batc
 envarg.add_argument('--batch_norm_decay', type=float, default=0.9997, help='batch norm decay argument for batch normalization.')
 envarg.add_argument("--number_of_classes", type=int, default=21, help="Number of classes to be predicted.")
 envarg.add_argument("--l2_regularizer", type=float, default=0.0001, help="l2 regularizer parameter.")
-envarg.add_argument('--starting_learning_rate', type=float, default=0.007, help="initial learning rate.")
+envarg.add_argument('--starting_learning_rate', type=float, default=0.000000001, help="initial learning rate.")
 envarg.add_argument("--multi_grid", type=list, default=[1,2,4], help="Spatial Pyramid Pooling rates")
 envarg.add_argument("--output_stride", type=int, default=16, help="Spatial Pyramid Pooling rates")
 
@@ -93,7 +93,10 @@ class_labels[-1] = 255
 
 is_training = tf.placeholder(tf.bool, shape=[])
 
-logits = network.densenet(batch_images, args, is_training=is_training, reuse=False)
+#logits = network.densenet(batch_images, args, is_training=True, reuse=tf.AUTO_REUSE)
+
+logits = tf.cond(is_training, true_fn=lambda: network.densenet(batch_images, args, is_training=True, reuse=False),
+                              false_fn=lambda: network.densenet(batch_images, args, is_training=False, reuse=True))
 
 valid_labels_batch_tensor, valid_logits_batch_tensor = training.get_valid_logits_and_labels(
     annotation_batch_tensor=batch_labels,
@@ -102,28 +105,24 @@ valid_labels_batch_tensor, valid_logits_batch_tensor = training.get_valid_logits
 
 # get the error and predictions from the network
 cross_entropy, pred, probabilities = network.model_loss(logits, valid_logits_batch_tensor, valid_labels_batch_tensor)
+
+tf.summary.scalar('cross_entropy', cross_entropy)
 tf.summary.image("prediction", tf.expand_dims(tf.cast(pred, tf.float32),3), 1)
 tf.summary.image("input", batch_images, 1)
 tf.summary.image("label", tf.expand_dims(tf.cast(batch_labels, tf.float32),3), 1)
 
-global_step = tf.Variable(0, trainable=False)
-starter_learning_rate = args.starting_learning_rate
-end_learning_rate = 0.0
-decay_steps = 30000
-learning_rate = tf.train.polynomial_decay(starter_learning_rate, global_step,
-                                          decay_steps, end_learning_rate,
-                                          power=0.9)
-tf.summary.scalar('learning_rate', learning_rate)
-
 with tf.variable_scope("optimizer_vars"):
-    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+    global_step = tf.Variable(0, trainable=False)
+    optimizer = tf.train.AdamOptimizer(learning_rate=args.starting_learning_rate)
+    train_step = slim.learning.create_train_op(cross_entropy, optimizer, global_step=global_step)
 
-train_step = slim.learning.create_train_op(cross_entropy, optimizer, global_step=global_step)
+pred = tf.reshape(pred, [-1,])
+gt = tf.reshape(batch_labels, [-1,])
+indices = tf.squeeze(tf.where(tf.less_equal(gt, args.number_of_classes - 1)), 1) ## ignore all labels >= num_classes
+gt = tf.cast(tf.gather(gt, indices), tf.int32)
+pred = tf.gather(pred, indices)
+miou, update_op = tf.contrib.metrics.streaming_mean_iou(pred, gt, num_classes=args.number_of_classes)
 
-# Define the accuracy metric: Mean Intersection Over Union
-miou, update_op = slim.metrics.streaming_mean_iou(predictions=tf.argmax(valid_logits_batch_tensor, axis=1),
-                                                   labels=tf.argmax(valid_labels_batch_tensor, axis=1),
-                                                   num_classes=args.number_of_classes)
 tf.summary.scalar('miou', miou)
 
 # Put all summary ops into one op. Produces string when you run it.
@@ -134,6 +133,13 @@ LOG_FOLDER = os.path.join(LOG_FOLDER, process_str_id)
 if not os.path.exists(LOG_FOLDER):
     print("Tensoboard folder:", LOG_FOLDER)
     os.makedirs(LOG_FOLDER)
+
+#print(end_points)
+variables_to_restore = slim.get_variables_to_restore(exclude=["resnet_v2_50/logits", "optimizer_vars",
+                                                              "DeepLab_v3/ASPP_layer", "DeepLab_v3/logits"])
+
+# Add ops to restore all the variables.
+restorer = tf.train.Saver(variables_to_restore)
 
 saver = tf.train.Saver()
 
@@ -150,6 +156,8 @@ with tf.Session() as sess:
     sess.run(tf.local_variables_initializer())
     sess.run(tf.global_variables_initializer())
 
+    restorer.restore(sess, "./resnet/checkpoints/resnet_v2_50.ckpt")
+    print("Model checkpoits restored!")
 
     # The `Iterator.string_handle()` method returns a tensor that can be evaluated
     # and used to feed the `handle` placeholder.
@@ -164,9 +172,9 @@ with tf.Session() as sess:
     while True:
         accumulated_train_loss = []
         for i in range(1): # run this number of batches before validation
-            lab, _, global_step_np, train_loss, pred_np, probabilities_np, summary_string = sess.run([batch_labels, train_step,
-                                                                                global_step, cross_entropy, pred,
-                                                                                probabilities, merged_summary_op],
+            _, global_step_np, train_loss, summary_string = sess.run([train_step,
+                                                                                global_step, cross_entropy,
+                                                                                merged_summary_op],
                                                                                 feed_dict={is_training:True,
                                                                                            handle: training_handle})
             accumulated_train_loss.append(train_loss)
@@ -177,7 +185,7 @@ with tf.Session() as sess:
         sess.run(validation_iterator.initializer)
 
         for i in range(20):
-            val_loss, pred_np, probabilities_np, summary_string, _ = sess.run([cross_entropy, pred, probabilities, merged_summary_op, update_op],
+            val_loss, summary_string, _ = sess.run([cross_entropy, merged_summary_op, update_op],
                                                                 feed_dict={handle: validation_handle,
                                                                            is_training:False})
 

@@ -12,11 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Contains building blocks for various versions of Deeplab_v3 Networks.
+"""Contains building blocks for various versions of Residual Networks.
 
-Deeplab_v3 networks (DeepLab) were proposed in:
-  Liang-Chieh Chen George Papandreou Florian Schroff Hartwig Adam
-  Rethinking Atrous Convolution for Semantic Image Segmentation. https://arxiv.org/pdf/1706.05587.pdf
+Residual networks (ResNets) were proposed in:
+  Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+  Deep Residual Learning for Image Recognition. arXiv:1512.03385, 2015
+
+More variants were introduced in:
+  Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+  Identity Mappings in Deep Residual Networks. arXiv: 1603.05027, 2016
+
+We can obtain different ResNet variants by changing the network depth, width,
+and form of residual unit. This module implements the infrastructure for
+building them. Concrete ResNet units and full ResNet networks are implemented in
+the accompanying resnet_v1.py and resnet_v2.py modules.
+
+Compared to https://github.com/KaimingHe/deep-residual-networks, in the current
+implementation we subsample the output activations in the last residual unit of
+each block, instead of subsampling the input activations in the first residual
+unit of each block. The two implementations give identical results but our
+implementation is more memory efficient.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -120,7 +135,7 @@ def stack_blocks_dense(net, blocks, multi_grid, output_stride=None,
   This is useful for dense prediction tasks such as semantic segmentation or
   object detection.
 
-  Most DeepLab consist of 4 ResNet blocks and subsample the activations by a
+  Most ResNets consist of 4 ResNet blocks and subsample the activations by a
   factor of 2 when transitioning between consecutive ResNet blocks. This results
   to a nominal ResNet output_stride equal to 8. If we set the output_stride to
   half the nominal network stride (e.g., output_stride=4), then we compute
@@ -167,14 +182,14 @@ def stack_blocks_dense(net, blocks, multi_grid, output_stride=None,
           # atrous convolution with stride=1 and multiply the atrous rate by the
           # current unit's stride for use in subsequent layers.
           if output_stride is not None and current_stride == output_stride:
-
             # Only uses atrous convolutions with multi-graid rates in the last (block4) block
             if block.scope == "block4":
               net = block.unit_fn(net, rate=rate * multi_grid[i], **dict(unit, stride=1))
-              print("Atrous rate for last block:", rate * multi_grid[i])
             else:
               net = block.unit_fn(net, rate=rate, **dict(unit, stride=1))
             rate *= unit.get('stride', 1)
+
+
           else:
             net = block.unit_fn(net, rate=1, **unit)
             current_stride *= unit.get('stride', 1)
@@ -186,18 +201,18 @@ def stack_blocks_dense(net, blocks, multi_grid, output_stride=None,
   return net
 
 
-def deeplab_arg_scope(weight_decay=0.0001,
-                      batch_norm_decay=0.997,
-                      batch_norm_epsilon=1e-5,
-                      batch_norm_scale=True,
-                      activation_fn=tf.nn.relu,
-                      use_batch_norm=True):
+def resnet_arg_scope(weight_decay=0.0001,
+                     batch_norm_decay=0.997,
+                     batch_norm_epsilon=1e-5,
+                     batch_norm_scale=True,
+                     activation_fn=tf.nn.relu,
+                     use_batch_norm=True):
   """Defines the default ResNet arg scope.
 
   TODO(gpapan): The batch-normalization related default values above are
     appropriate for use in conjunction with the reference ResNet models
     released at https://github.com/KaimingHe/deep-residual-networks. When
-    train DeepLab from scratch, they might need to be tuned.
+    training ResNets from scratch, they might need to be tuned.
 
   Args:
     weight_decay: The weight decay to use for regularizing the model.
@@ -211,7 +226,7 @@ def deeplab_arg_scope(weight_decay=0.0001,
     use_batch_norm: Whether or not to use batch normalization.
 
   Returns:
-    An `arg_scope` to use for the deeplab models.
+    An `arg_scope` to use for the resnet models.
   """
   batch_norm_params = {
       'decay': batch_norm_decay,
