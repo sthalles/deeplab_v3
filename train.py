@@ -9,7 +9,7 @@ import network
 from preprocessing.training import random_flip_image_and_annotation
 from preprocessing.read_data import tf_record_parser
 import matplotlib.pyplot as plt
-
+import eval
 
 # 0=background
 # 1=aeroplane
@@ -113,15 +113,6 @@ with tf.variable_scope("optimizer_vars"):
     optimizer = tf.train.AdamOptimizer(learning_rate=args.starting_learning_rate)
     train_step = slim.learning.create_train_op(cross_entropy, optimizer, global_step=global_step)
 
-pred = tf.reshape(pred, [-1,])
-gt = tf.reshape(batch_labels, [-1,])
-indices = tf.squeeze(tf.where(tf.less_equal(gt, args.number_of_classes - 1)), 1) ## ignore all labels >= num_classes
-gt = tf.cast(tf.gather(gt, indices), tf.int32)
-pred = tf.gather(pred, indices)
-miou, update_op = tf.contrib.metrics.streaming_mean_iou(pred, gt, num_classes=args.number_of_classes)
-
-tf.summary.scalar('miou', miou)
-
 # Put all summary ops into one op. Produces string when you run it.
 process_str_id = str(os.getpid())
 merged_summary_op = tf.summary.merge_all()
@@ -134,6 +125,15 @@ if not os.path.exists(LOG_FOLDER):
 #print(end_points)
 variables_to_restore = slim.get_variables_to_restore(exclude=["resnet_v2_50/logits", "optimizer_vars",
                                                               "DeepLab_v3/ASPP_layer", "DeepLab_v3/logits"])
+
+pred = tf.reshape(pred, [-1,])
+gt = tf.reshape(batch_labels, [-1,])
+indices = tf.squeeze(tf.where(tf.less_equal(gt, args.number_of_classes - 1)), 1) ## ignore all labels >= num_classes
+gt = tf.cast(tf.gather(gt, indices), tf.int32)
+pred = tf.gather(pred, indices)
+miou, update_op = tf.contrib.metrics.streaming_mean_iou(pred, gt, num_classes=args.number_of_classes)
+tf.summary.scalar('miou', miou)
+
 
 # Add ops to restore all the variables.
 restorer = tf.train.Saver(variables_to_restore)
@@ -164,9 +164,8 @@ with tf.Session() as sess:
     sess.run(training_iterator.initializer)
 
     validation_running_loss = []
-    validation_running_miou = []
 
-    train_steps_before_eval = 20
+    train_steps_before_eval = 100
     validation_steps = 20
     while True:
         accumulated_train_loss = 0
@@ -185,25 +184,26 @@ with tf.Session() as sess:
         sess.run(validation_iterator.initializer)
 
         validation_average_loss = 0
-        validation_average_miou = 0
+        mean_IoU_list = []
+        freq_IoU_list = []
+        mean_acc_list = []
+        pixel_acc_list = []
+
         for i in range(validation_steps):
-            val_loss, summary_string, _ = sess.run([cross_entropy, merged_summary_op, update_op],
+            val_loss, summary_string, _= sess.run([cross_entropy, merged_summary_op, update_op],
                                                                 feed_dict={handle: validation_handle,
                                                                            is_training:False})
 
-            miou_np = sess.run(miou)
-            validation_average_miou+=miou_np
+
             validation_average_loss+=val_loss
 
+
         validation_average_loss/=validation_steps
-        validation_average_miou/=validation_steps
 
         # keep running average of the miou and validation loss
         validation_running_loss.append(validation_average_loss)
-        validation_running_miou.append(validation_average_miou)
 
         validation_global_loss = np.mean(validation_running_loss)
-        validation_global_miou = np.mean(validation_running_miou)
 
         if validation_global_loss < current_best_val_loss:
             # Save the variables to disk.
@@ -213,14 +213,13 @@ with tf.Session() as sess:
 
             # update metadata and save it
             args.current_best_val_loss = str(current_best_val_loss)
-            args.accumulated_validation_miou = str(validation_global_miou)
 
             with open(LOG_FOLDER + "/train/" + 'data.json', 'w') as fp:
                 json.dump(args.__dict__, fp, sort_keys=True, indent=4)
 
         print("Global step:", global_step_np, "Average train loss:",
-              accumulated_train_loss, "\tGlobal Validation Avg Loss:",
-              validation_global_loss, "\tGlobal Avg mIOU:", validation_global_miou)
+              accumulated_train_loss, "\tGlobal Validation Avg Loss:", validation_global_loss,
+              "MIoU:", sess.run(miou))
 
         test_writer.add_summary(summary_string, global_step_np)
 
