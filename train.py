@@ -184,10 +184,6 @@ with tf.Session() as sess:
         sess.run(validation_iterator.initializer)
 
         validation_average_loss = 0
-        mean_IoU_list = []
-        freq_IoU_list = []
-        mean_acc_list = []
-        pixel_acc_list = []
 
         for i in range(validation_steps):
             val_loss, summary_string, _= sess.run([cross_entropy, merged_summary_op, update_op],
@@ -196,7 +192,6 @@ with tf.Session() as sess:
 
 
             validation_average_loss+=val_loss
-
 
         validation_average_loss/=validation_steps
 
