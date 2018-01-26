@@ -1,43 +1,156 @@
 import tensorflow as tf
+from tensorflow.python.ops import control_flow_ops
 import numpy as np
-import deeplab_v3, deeplab_utils
+from matplotlib import pyplot as plt
 import network
-import argparse
-
 slim = tf.contrib.slim
+import os
+import itertools
+import json
+from preprocessing.read_data import tf_record_parser, scale_image_with_crop_padding
+from preprocessing import training
+from metrics import *
 
-parser = argparse.ArgumentParser()
+plt.interactive(False)
 
-envarg = parser.add_argument_group('Training params')
-envarg.add_argument("--batch_norm_epsilon", type=float, default=1e-5, help="batch norm epsilon argument for batch normalization")
-envarg.add_argument('--batch_norm_decay', type=float, default=0.9997, help='batch norm decay argument for batch normalization.')
-envarg.add_argument("--number_of_classes", type=int, default=21, help="Number of classes to be predicted.")
-envarg.add_argument("--l2_regularizer", type=float, default=0.0001, help="l2 regularizer parameter.")
-envarg.add_argument('--starting_learning_rate', type=float, default=0.007, help="initial learning rate.")
-envarg.add_argument("--multi_grid", type=list, default=[1,2,4], help="Spatial Pyramid Pooling rates")
-envarg.add_argument("--output_stride", type=int, default=16, help="Spatial Pyramid Pooling rates")
+# best: 18388
+model_name = "18388"
 
-envarg.add_argument("--current_best_val_loss", type=int, default=99999, help="Best validation loss value.")
-envarg.add_argument("--accumulated_validation_miou", type=int, default=0, help="Accumulated validation intersection over union.")
+os.environ["CUDA_VISIBLE_DEVICES"]="3"
+log_folder = './tboard_logs'
 
-trainarg = parser.add_argument_group('Training')
-trainarg.add_argument("--batch_size", type=int, default=16, help="Batch size for network train.")
+if not os.path.exists(os.path.join(log_folder, model_name, "test")):
+    os.makedirs(os.path.join(log_folder, model_name, "test"))
 
-args = parser.parse_args()
+with open(log_folder + '/' + model_name + '/train/data.json', 'r') as fp:
+    args = json.load(fp)
+
+class Dotdict(dict):
+     """dot.notation access to dictionary attributes"""
+     __getattr__ = dict.get
+     __setattr__ = dict.__setitem__
+     __delattr__ = dict.__delitem__
+
+args = Dotdict(args)
+
+# 0=background
+# 1=aeroplane
+# 2=bicycle
+# 3=bird
+# 4=boat
+# 5=bottle
+# 6=bus
+# 7=car
+# 8=cat
+# 9=chair
+# 10=cow
+# 11=diningtable
+# 12=dog
+# 13=horse
+# 14=motorbike
+# 15=person
+# 16=potted plant
+# 17=sheep
+# 18=sofa
+# 19=train
+# 20=tv/monitor
+# 255=unknown
 
 class_labels = [v for v in range((args.number_of_classes+1))]
 class_labels[-1] = 255
 
-inputs = np.zeros((1,513,513,1), dtype=np.float32)
-labels = np.zeros((1,513,513), dtype=np.int32)
+LOG_FOLDER = './tboard_logs'
+TEST_DATASET_DIR="./dataset/"
+TEST_FILE = 'test.tfrecords'
 
-multi_grid = [1,2,4]
+test_filenames = [os.path.join(TEST_DATASET_DIR,TEST_FILE)]
+test_dataset = tf.data.TFRecordDataset(test_filenames)
+test_dataset = test_dataset.map(tf_record_parser)  # Parse the record into tensors.
+test_dataset = test_dataset.map(scale_image_with_crop_padding)
+test_dataset = test_dataset.shuffle(buffer_size=100)
+test_dataset = test_dataset.batch(args.batch_size)
 
-# inputs has shape [batch, 513, 513, 3]
-net = network.densenet(inputs, args, is_training=False, reuse=False)
-cross_entropy, pred, probabilities = network.model_loss(net, labels, class_labels)
+iterator = test_dataset.make_one_shot_iterator()
+batch_images, batch_labels, batch_shapes = iterator.get_next()
+
+logits =  network.densenet(batch_images, args, is_training=False, reuse=False)
+
+valid_labels_batch_tensor, valid_logits_batch_tensor = training.get_valid_logits_and_labels(
+    annotation_batch_tensor=batch_labels,
+    logits_batch_tensor=logits,
+    class_labels=class_labels)
+
+cross_entropies = tf.nn.softmax_cross_entropy_with_logits(logits=valid_logits_batch_tensor,
+                                                          labels=valid_labels_batch_tensor)
+
+cross_entropy_mean = tf.reduce_mean(cross_entropies)
+tf.summary.scalar('cross_entropy', cross_entropy_mean)
+
+predictions = tf.argmax(logits, axis=3)
+probabilities = tf.nn.softmax(logits)
+
+merged_summary_op = tf.summary.merge_all()
+saver = tf.train.Saver()
+
+test_folder = os.path.join(log_folder, model_name, "test")
+train_folder = os.path.join(log_folder, model_name, "train")
+
 with tf.Session() as sess:
+
+    # Create a saver.
+    sess.run(tf.local_variables_initializer())
     sess.run(tf.global_variables_initializer())
 
-    res = sess.run(net)
-    print(res.shape)
+    # Restore variables from disk.
+    saver.restore(sess, os.path.join(train_folder, "model.ckpt"))
+    print("Model", model_name, "restored.")
+
+    mean_IoU = []
+    mean_pixel_acc = []
+    mean_freq_weighted_IU = []
+    mean_acc = []
+
+    while True:
+        try:
+            pred_np, annotations_np, shapes_np, summary_string= sess.run([predictions, batch_labels, batch_shapes, merged_summary_op])
+            heights, widths = shapes_np
+
+            # loop through the images in the batch and extract the valid areas from
+            for i in range(pred_np.shape[0]):
+
+                label_image = annotations_np[i]
+                pred_image = pred_np[i]
+
+                indices = np.where(label_image != 255)
+                label_image = label_image[np.where(label_image != 255)]
+                pred_image = pred_image[indices]
+
+                if label_image.shape[0] == 263169:
+                    label_image = np.reshape(label_image, (513,513))
+                    pred_image = np.reshape(pred_image, (513,513))
+                else:
+                    label_image = np.reshape(label_image, (heights[i], widths[i]))
+                    pred_image = np.reshape(pred_image, (heights[i], widths[i]))
+
+                pix_acc = pixel_accuracy(pred_image, label_image)
+                m_acc = mean_accuracy(pred_image, label_image)
+                IoU = mean_IU(pred_image, label_image)
+                freq_weighted_IU = frequency_weighted_IU(pred_image, label_image)
+
+                mean_pixel_acc.append(pix_acc)
+                mean_acc.append(m_acc)
+                mean_IoU.append(IoU)
+                mean_freq_weighted_IU.append(freq_weighted_IU)
+
+                # f, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8))
+                # ax1.imshow(label_image)
+                # ax2.imshow(pred_image)
+                # plt.show()
+
+        except tf.errors.OutOfRangeError:
+            break
+
+    print("Mean pixel accuracy:", np.mean(mean_pixel_acc))
+    print("Mean accuraccy:", np.mean(mean_acc))
+    print("Mean IoU:", np.mean(mean_IoU))
+    print("Mean frequency weighted IU:", np.mean(mean_freq_weighted_IU))

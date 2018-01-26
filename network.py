@@ -1,7 +1,6 @@
 import tensorflow as tf
 slim = tf.contrib.slim
 from resnet import resnet_v2, resnet_utils
-from preprocessing import training
 
 # ImageNet mean statistics
 _R_MEAN = 123.68
@@ -55,7 +54,7 @@ def densenet(inputs, args, is_training, reuse):
                                                is_training=is_training,
                                                global_pool=False,
                                                spatial_squeeze=False,
-                                               output_stride=16,
+                                               output_stride=args.output_stride,
                                                reuse=reuse)
 
         with tf.variable_scope("DeepLab_v3", reuse=reuse):
@@ -70,23 +69,6 @@ def densenet(inputs, args, is_training, reuse):
 
             size = tf.shape(inputs)[1:3]
             # resize the output logits to match the labels dimensions
-            net = tf.image.resize_nearest_neighbor(net, size)
+            #net = tf.image.resize_nearest_neighbor(net, size)
+            net = tf.image.resize_bilinear(net, size)
             return net
-
-
-def model_loss(logits, labels, class_labels):
-
-    valid_labels_batch_tensor, valid_logits_batch_tensor = training.get_valid_logits_and_labels(
-        annotation_batch_tensor=labels,
-        logits_batch_tensor=logits,
-        class_labels=class_labels)
-
-    cross_entropies = tf.nn.softmax_cross_entropy_with_logits(logits=valid_logits_batch_tensor,
-                                                              labels=valid_labels_batch_tensor)
-
-    cross_entropy_mean = tf.reduce_mean(cross_entropies)
-
-    pred = tf.argmax(logits, axis=3)
-
-    return cross_entropy_mean, pred
-

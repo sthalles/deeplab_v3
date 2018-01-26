@@ -2,49 +2,6 @@ import tensorflow as tf
 from tensorflow.python.ops import control_flow_ops
 slim = tf.contrib.slim
 
-
-def random_flip_image_and_annotation(image_tensor, annotation_tensor):
-    """Accepts image tensor and annotation tensor and returns randomly flipped tensors of both.
-    The function performs random flip of image and annotation tensors with probability of 1/2
-    The flip is performed or not performed for image and annotation consistently, so that
-    annotation matches the image.
-
-    Parameters
-    ----------
-    image_tensor : Tensor of size (width, height, 3)
-        Tensor with image
-    annotation_tensor : Tensor of size (width, height, 1)
-        Tensor with annotation
-
-    Returns
-    -------
-    randomly_flipped_img : Tensor of size (width, height, 3) of type tf.float.
-        Randomly flipped image tensor
-    randomly_flipped_annotation : Tensor of size (width, height, 1)
-        Randomly flipped annotation tensor
-
-    """
-    original_shape = tf.shape(annotation_tensor)
-    # ensure the annotation tensor has shape (width, height, 1)
-    annotation_tensor = tf.cond(tf.rank(annotation_tensor) < 3,
-                                lambda: tf.expand_dims(annotation_tensor, axis=2),
-                                lambda: annotation_tensor)
-
-    # Random variable: two possible outcomes (0 or 1)
-    # with a 1 in 2 chance
-    random_var = tf.random_uniform(maxval=2, dtype=tf.int32, shape=[])
-
-
-    randomly_flipped_img = tf.cond(pred=tf.equal(random_var, 0),
-                                                 true_fn=lambda: tf.image.flip_left_right(image_tensor),
-                                                 false_fn=lambda: image_tensor)
-
-    randomly_flipped_annotation = tf.cond(pred=tf.equal(random_var, 0),
-                                                        true_fn=lambda: tf.image.flip_left_right(annotation_tensor),
-                                                        false_fn=lambda: annotation_tensor)
-
-    return randomly_flipped_img, tf.reshape(randomly_flipped_annotation, original_shape)
-
 def get_labels_from_annotation(annotation_tensor, class_labels):
     """Returns tensor of size (width, height, num_classes) derived from annotation tensor.
     The function returns tensor that is of a size (width, height, num_classes) which
@@ -92,9 +49,6 @@ def get_labels_from_annotation(annotation_tensor, class_labels):
 
     return labels_2d_stacked_float
 
-
-
-
 def get_labels_from_annotation_batch(annotation_batch_tensor, class_labels):
     """Returns tensor of size (batch_size, width, height, num_classes) derived
     from annotation batch tensor. The function returns tensor that is of a size
@@ -126,10 +80,6 @@ def get_labels_from_annotation_batch(annotation_batch_tensor, class_labels):
                              dtype=tf.float32)
 
     return batch_labels
-
-
-
-
 
 def get_valid_entries_indices_from_annotation_batch(annotation_batch_tensor, class_labels):
     """Returns tensor of size (num_valid_eintries, 3).

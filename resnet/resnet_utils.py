@@ -188,8 +188,6 @@ def stack_blocks_dense(net, blocks, multi_grid, output_stride=None,
             else:
               net = block.unit_fn(net, rate=rate, **dict(unit, stride=1))
             rate *= unit.get('stride', 1)
-
-
           else:
             net = block.unit_fn(net, rate=1, **unit)
             current_stride *= unit.get('stride', 1)
@@ -235,7 +233,7 @@ def resnet_arg_scope(weight_decay=0.0001,
       'scale': batch_norm_scale,
       'updates_collections': None,
       'is_training': is_training,
-      'fused': None,  # Use fused batch norm if possible.
+      'fused': True,  # Use fused batch norm if possible.
   }
 
   with slim.arg_scope(
