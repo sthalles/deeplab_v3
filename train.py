@@ -172,18 +172,18 @@ with tf.Session() as sess:
     train_steps_before_eval = 100
     validation_steps = 20
     while True:
-        accumulated_train_loss = 0
+        training_average_loss = 0
         for i in range(train_steps_before_eval): # run this number of batches before validation
             _, global_step_np, train_loss, summary_string = sess.run([train_step,
                                                                                 global_step, cross_entropy,
                                                                                 merged_summary_op],
                                                                                 feed_dict={is_training:True,
                                                                                            handle: training_handle})
-            accumulated_train_loss += train_loss
+            training_average_loss += train_loss
             if i % 10 == 0:
                 train_writer.add_summary(summary_string, global_step_np)
 
-        accumulated_train_loss/=train_steps_before_eval
+        training_average_loss/=train_steps_before_eval
 
         # at the end of each train interval, run validation
         sess.run(validation_iterator.initializer)
@@ -220,7 +220,7 @@ with tf.Session() as sess:
                 json.dump(args.__dict__, fp, sort_keys=True, indent=4)
 
         print("Global step:", global_step_np, "Average train loss:",
-              accumulated_train_loss, "\tGlobal Validation Avg Loss:", validation_global_loss,
+              training_average_loss, "\tGlobal Validation Avg Loss:", validation_global_loss,
               "MIoU:", validation_average_miou)
 
         test_writer.add_summary(summary_string, global_step_np)
