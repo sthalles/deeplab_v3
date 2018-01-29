@@ -17,9 +17,9 @@ To train this model run:
 python train.py --starting_learning_rate=0.00001 --batch_norm_decay=0.997 --gpu_id=0 --resnet_model=resnet_v2_50
 ```
 
-Check out the train.py file for more input argument options. Each run produces a folder inside the "tboard_logs" directory (create it if not there).
+Check out the *train.py* file for more input argument options. Each run produces a folder inside the *tboard_logs* directory (create it if not there).
 
-To evaluate the model, run the test.py file passing to it the model_id parameter (the name of the folder created during training).
+To evaluate the model, run the *test.py* file passing to it the model_id parameter (the name of the folder created during training).
 
 ```
 python test.py --model_id=16645
