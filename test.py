@@ -13,10 +13,10 @@ from metrics import *
 
 plt.interactive(False)
 
-# best: 18388
-model_name = "18388"
+# best: 16645
+model_name = "16645"
 
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 log_folder = './tboard_logs'
 
 if not os.path.exists(os.path.join(log_folder, model_name, "test")):
@@ -112,7 +112,7 @@ with tf.Session() as sess:
 
     while True:
         try:
-            pred_np, annotations_np, shapes_np, summary_string= sess.run([predictions, batch_labels, batch_shapes, merged_summary_op])
+            images_np, pred_np, annotations_np, shapes_np, summary_string= sess.run([batch_images, predictions, batch_labels, batch_shapes, merged_summary_op])
             heights, widths = shapes_np
 
             # loop through the images in the batch and extract the valid areas from
@@ -120,17 +120,21 @@ with tf.Session() as sess:
 
                 label_image = annotations_np[i]
                 pred_image = pred_np[i]
+                input_image = images_np[i]
 
                 indices = np.where(label_image != 255)
-                label_image = label_image[np.where(label_image != 255)]
+                label_image = label_image[indices]
                 pred_image = pred_image[indices]
+                input_image = input_image[indices]
 
                 if label_image.shape[0] == 263169:
                     label_image = np.reshape(label_image, (513,513))
                     pred_image = np.reshape(pred_image, (513,513))
+                    input_image = np.reshape(input_image, (513,513,3))
                 else:
                     label_image = np.reshape(label_image, (heights[i], widths[i]))
                     pred_image = np.reshape(pred_image, (heights[i], widths[i]))
+                    input_image = np.reshape(input_image, (heights[i], widths[i], 3))
 
                 pix_acc = pixel_accuracy(pred_image, label_image)
                 m_acc = mean_accuracy(pred_image, label_image)
@@ -142,10 +146,12 @@ with tf.Session() as sess:
                 mean_IoU.append(IoU)
                 mean_freq_weighted_IU.append(freq_weighted_IU)
 
-                # f, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8))
-                # ax1.imshow(label_image)
-                # ax2.imshow(pred_image)
-                # plt.show()
+                #f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8, 8))
+
+                #ax1.imshow(input_image.astype(np.uint8))
+                #ax2.imshow(label_image)
+                #ax3.imshow(pred_image)
+                #plt.show()
 
         except tf.errors.OutOfRangeError:
             break

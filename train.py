@@ -38,10 +38,10 @@ parser = argparse.ArgumentParser()
 
 envarg = parser.add_argument_group('Training params')
 envarg.add_argument("--batch_norm_epsilon", type=float, default=1e-5, help="batch norm epsilon argument for batch normalization")
-envarg.add_argument('--batch_norm_decay', type=float, default=0.997, help='batch norm decay argument for batch normalization.')
+envarg.add_argument('--batch_norm_decay', type=float, default=0.9997, help='batch norm decay argument for batch normalization.')
 envarg.add_argument("--number_of_classes", type=int, default=21, help="Number of classes to be predicted.")
 envarg.add_argument("--l2_regularizer", type=float, default=0.0001, help="l2 regularizer parameter.")
-envarg.add_argument('--starting_learning_rate', type=float, default=0.00001, help="initial learning rate.")
+envarg.add_argument('--starting_learning_rate', type=float, default=0.000055, help="initial learning rate.")
 envarg.add_argument("--multi_grid", type=list, default=[1,2,4], help="Spatial Pyramid Pooling rates")
 envarg.add_argument("--output_stride", type=int, default=16, help="Spatial Pyramid Pooling rates")
 envarg.add_argument("--gpu_id", type=int, default=0, help="Id of the GPU to be used")
@@ -68,7 +68,7 @@ training_dataset = training_dataset.map(distort_randomly_image_color)
 training_dataset = training_dataset.map(scale_image_with_crop_padding)
 training_dataset = training_dataset.map(random_flip_image_and_annotation)  # Parse the record into tensors.
 training_dataset = training_dataset.repeat()  # number of epochs
-training_dataset = training_dataset.shuffle(buffer_size=1000)
+training_dataset = training_dataset.shuffle(buffer_size=500)
 training_dataset = training_dataset.batch(args.batch_size)
 
 validation_filenames = [os.path.join(TRAIN_DATASET_DIR,VALIDATION_FILE)]
@@ -98,8 +98,7 @@ class_labels[-1] = 255
 
 is_training = tf.placeholder(tf.bool, shape=[])
 
-logits = tf.cond(is_training, true_fn=lambda: network.densenet(batch_images, args, is_training=True, reuse=False),
-                              false_fn=lambda: network.densenet(batch_images, args, is_training=False, reuse=True))
+logits = network.deeplab_v3(batch_images, args, is_training=True, reuse=False)
 
 # get valid logits and labels (factor the 255 padded mask out for cross entropy)
 valid_labels_batch_tensor, valid_logits_batch_tensor = training.get_valid_logits_and_labels(
@@ -157,8 +156,11 @@ with tf.Session() as sess:
     sess.run(tf.local_variables_initializer())
     sess.run(tf.global_variables_initializer())
 
-    restorer.restore(sess, "./resnet/checkpoints/resnet_v2_50.ckpt")
-    print("Model checkpoits restored!")
+    try:
+        restorer.restore(sess, "./resnet/checkpoints/resnet_v2_50.ckpt")
+        print("Model checkpoits restored!")
+    except FileNotFoundError:
+        print("Download ResNets checkpoints from: https://github.com/tensorflow/models/tree/master/research/slim")
 
     # The `Iterator.string_handle()` method returns a tensor that can be evaluated
     # and used to feed the `handle` placeholder.

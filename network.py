@@ -40,7 +40,7 @@ def atrous_spatial_pyramid_pooling(net, scope, depth=256, reuse=None):
         return net
 
 
-def densenet(inputs, args, is_training, reuse):
+def deeplab_v3(inputs, args, is_training, reuse):
 
     # mean subtraction normalization
     inputs = inputs - [_R_MEAN, _G_MEAN, _B_MEAN]
