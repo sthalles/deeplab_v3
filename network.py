@@ -49,18 +49,19 @@ def deeplab_v3(inputs, args, is_training, reuse):
     with slim.arg_scope(resnet_utils.resnet_arg_scope(args.l2_regularizer, is_training,
                                                       args.batch_norm_decay,
                                                       args.batch_norm_epsilon)):
-        _, end_points = resnet_v2.resnet_v2_50(inputs,
-                                               args.number_of_classes,
-                                               is_training=is_training,
-                                               global_pool=False,
-                                               spatial_squeeze=False,
-                                               output_stride=args.output_stride,
-                                               reuse=reuse)
+        resnet = getattr(resnet_v2, args.resnet_model)
+        _, end_points = resnet(inputs,
+                               args.number_of_classes,
+                               is_training=is_training,
+                               global_pool=False,
+                               spatial_squeeze=False,
+                               output_stride=args.output_stride,
+                               reuse=reuse)
 
         with tf.variable_scope("DeepLab_v3", reuse=reuse):
 
             # get block 4 feature outputs
-            net = end_points['resnet_v2_50/block4']
+            net = end_points[args.resnet_model + '/block4']
 
             net = atrous_spatial_pyramid_pooling(net, "ASPP_layer", depth=256, reuse=reuse)
 

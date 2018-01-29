@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import network
 slim = tf.contrib.slim
 import os
-import itertools
+import argparse
 import json
 from preprocessing.read_data import tf_record_parser, scale_image_with_crop_padding
 from preprocessing import training
@@ -13,10 +13,16 @@ from metrics import *
 
 plt.interactive(False)
 
-# best: 16645
-model_name = "16645"
+parser = argparse.ArgumentParser()
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+envarg = parser.add_argument_group('Eval params')
+envarg.add_argument("--model_id", type=int, help="Model id name to be loaded.")
+input_args = parser.parse_args()
+
+# best: 16645
+model_name = str(input_args.model_id)
+
+os.environ["CUDA_VISIBLE_DEVICES"]="3"
 log_folder = './tboard_logs'
 
 if not os.path.exists(os.path.join(log_folder, model_name, "test")):
@@ -71,23 +77,23 @@ test_dataset = test_dataset.shuffle(buffer_size=100)
 test_dataset = test_dataset.batch(args.batch_size)
 
 iterator = test_dataset.make_one_shot_iterator()
-batch_images, batch_labels, batch_shapes = iterator.get_next()
+batch_images_tf, batch_labels_tf, batch_shapes_tf = iterator.get_next()
 
-logits =  network.densenet(batch_images, args, is_training=False, reuse=False)
+logits_tf =  network.deeplab_v3(batch_images_tf, args, is_training=False, reuse=False)
 
-valid_labels_batch_tensor, valid_logits_batch_tensor = training.get_valid_logits_and_labels(
-    annotation_batch_tensor=batch_labels,
-    logits_batch_tensor=logits,
+valid_labels_batch_tf, valid_logits_batch_tf = training.get_valid_logits_and_labels(
+    annotation_batch_tensor=batch_labels_tf,
+    logits_batch_tensor=logits_tf,
     class_labels=class_labels)
 
-cross_entropies = tf.nn.softmax_cross_entropy_with_logits(logits=valid_logits_batch_tensor,
-                                                          labels=valid_labels_batch_tensor)
+cross_entropies_tf = tf.nn.softmax_cross_entropy_with_logits(logits=valid_logits_batch_tf,
+                                                             labels=valid_labels_batch_tf)
 
-cross_entropy_mean = tf.reduce_mean(cross_entropies)
-tf.summary.scalar('cross_entropy', cross_entropy_mean)
+cross_entropy_mean_tf = tf.reduce_mean(cross_entropies_tf)
+tf.summary.scalar('cross_entropy', cross_entropy_mean_tf)
 
-predictions = tf.argmax(logits, axis=3)
-probabilities = tf.nn.softmax(logits)
+predictions_tf = tf.argmax(logits_tf, axis=3)
+probabilities_tf = tf.nn.softmax(logits_tf)
 
 merged_summary_op = tf.summary.merge_all()
 saver = tf.train.Saver()
@@ -112,15 +118,15 @@ with tf.Session() as sess:
 
     while True:
         try:
-            images_np, pred_np, annotations_np, shapes_np, summary_string= sess.run([batch_images, predictions, batch_labels, batch_shapes, merged_summary_op])
-            heights, widths = shapes_np
+            batch_images_np, batch_predictions_np, batch_labels_np, batch_shapes_np, summary_string= sess.run([batch_images_tf, predictions_tf, batch_labels_tf, batch_shapes_tf, merged_summary_op])
+            heights, widths = batch_shapes_np
 
-            # loop through the images in the batch and extract the valid areas from
-            for i in range(pred_np.shape[0]):
+            # loop through the images in the batch and extract the valid areas from the tensors
+            for i in range(batch_predictions_np.shape[0]):
 
-                label_image = annotations_np[i]
-                pred_image = pred_np[i]
-                input_image = images_np[i]
+                label_image = batch_labels_np[i]
+                pred_image = batch_predictions_np[i]
+                input_image = batch_images_np[i]
 
                 indices = np.where(label_image != 255)
                 label_image = label_image[indices]
