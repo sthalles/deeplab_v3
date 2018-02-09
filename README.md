@@ -8,6 +8,7 @@ For a complete documentation of this implementation, check out the [blog post](h
 
 - Python 3.x
 - Numpy
+- Tensorflow 1.4.0
 
 ## Training and Eval
 
