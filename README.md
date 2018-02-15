@@ -14,7 +14,7 @@ For a complete documentation of this implementation, check out the [blog post](h
 
 Download the model checkpoints and dataset.
  
-- [checkpoints](https://www.dropbox.com/sh/2j8f4jyrh32xbh8/AACEQkVx7k7V9rYRa2YX04FBa?dl=0)
+- [checkpoints](https://www.dropbox.com/sh/s7sx69pqjhrk0s4/AACXWCRd9JJ0zvcvDES9G3sba?dl=0)
 - [dataset](https://mega.nz/#F!LlFCSaBB!1L_EoepUwhrHw4lHv1HRaA)
 
 ## Training and Eval
@@ -27,7 +27,7 @@ python train.py --starting_learning_rate=0.00001 --batch_norm_decay=0.997 --gpu_
 
 Check out the *train.py* file for more input argument options. Each run produces a folder inside the *tboard_logs* directory (create it if not there).
 
-To evaluate the model, run the *test.py* file passing to it the model_id parameter (the name of the folder created during training).
+To evaluate the model, run the *test.py* file passing to it the model_id parameter (the name of the folder created inside *tboard_logs* during training).
 
 ```
 python test.py --model_id=16645
