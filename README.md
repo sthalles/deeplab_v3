@@ -39,6 +39,8 @@ To create the dataset, first make sure you have the [Pascal VOC 2012](http://hos
 
 After, head to ```dataset/``` and run the ```CreateTfRecord.ipynb``` notebook. The ```custom_train.txt``` file contains the name of the images selected for training. This file is designed to use the Pascal VOC 2012 set as a **TESTING** set. Therefore, it doesn't contain any images from the VOC 2012 val dataset. For more info, see the **Training** section of [Deeplab Image Semantic Segmentation Network](https://sthalles.github.io/deep_segmentation_network/).
 
+Obs. You can skip that part and direct download the datasets used in this experiment - See [Downloads](#Downloads).
+
 ## Results
 
 - Pixel accuracy: ~91%
