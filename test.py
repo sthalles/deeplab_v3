@@ -22,7 +22,9 @@ input_args = parser.parse_args()
 # best: 16645
 model_name = str(input_args.model_id)
 
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
+# uncomment and set the GPU id if applicable.
+# os.environ["CUDA_VISIBLE_DEVICES"]="3"
+
 log_folder = './tboard_logs'
 
 if not os.path.exists(os.path.join(log_folder, model_name, "test")):
