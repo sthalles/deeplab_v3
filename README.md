@@ -15,7 +15,9 @@ For a complete documentation of this implementation, check out the [blog post](h
 Download the model checkpoints and dataset.
 
 - [checkpoints](https://www.dropbox.com/sh/s7sx69pqjhrk0s4/AACXWCRd9JJ0zvcvDES9G3sba?dl=0)
-- [dataset](https://mega.nz/#F!LlFCSaBB!1L_EoepUwhrHw4lHv1HRaA)
+- Dataset
+  * [Option 1](https://mega.nz/#F!LlFCSaBB!1L_EoepUwhrHw4lHv1HRaA)
+  * [Option 2](http://www.mediafire.com/?wx7h526chc4ar)
 
 ## Training and Eval
 
