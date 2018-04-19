@@ -21,6 +21,8 @@ Download the model checkpoints and dataset.
 
 ## Training and Eval
 
+Before training, create a folder named "checkpoints/" inside the "resnet/" directory. Download the pre-trained [resnet-50](https://arxiv.org/abs/1603.05027) or [resnet-101](https://arxiv.org/abs/1603.05027) model from here, and place the files inside "checkpoints/".
+
 To train this model run:
 
 ```
