@@ -48,7 +48,7 @@ Also, be aware that originally Deeplab_v3 performs random crops of size *513x513
 To create the dataset, first make sure you have the [Pascal VOC 2012](http://host.robots.ox.ac.uk/pascal/VOC/voc2012/) and/or the [Semantic Boundaries Dataset and Benchmark](http://home.bharathh.info/pubs/codes/SBD/download.html) datasets downloaded.
 
 **Note: You do not need both datasets.**
- - If you just want to test the code with one of the datasets (say the SBDB), run the notebook normally, and it should work.
+ - If you just want to test the code with one of the datasets (say the SBD), run the notebook normally, and it should work.
 
 After, head to ```dataset/``` and run the ```CreateTfRecord.ipynb``` notebook. 
 
