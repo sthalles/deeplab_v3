@@ -6,7 +6,9 @@ slim = tf.contrib.slim
 import os
 import json
 import network
-from preprocessing.read_data import tf_record_parser, rescale_image_and_annotation_by_factor, scale_image_with_crop_padding, random_flip_image_and_annotation, distort_randomly_image_color
+from preprocessing.read_data import download_resnet_checkpoint_if_necessary, tf_record_parser, \
+    rescale_image_and_annotation_by_factor, scale_image_with_crop_padding, \
+    random_flip_image_and_annotation, distort_randomly_image_color
 from preprocessing import training
 
 # 0=background
@@ -32,7 +34,6 @@ from preprocessing import training
 # 20=tv/monitor
 # 255=unknown
 
-
 parser = argparse.ArgumentParser()
 
 envarg = parser.add_argument_group('Training params')
@@ -44,6 +45,7 @@ envarg.add_argument('--starting_learning_rate', type=float, default=0.00001, hel
 envarg.add_argument("--multi_grid", type=list, default=[1,2,4], help="Spatial Pyramid Pooling rates")
 envarg.add_argument("--output_stride", type=int, default=16, help="Spatial Pyramid Pooling rates")
 envarg.add_argument("--gpu_id", type=int, default=0, help="Id of the GPU to be used")
+envarg.add_argument("--crop_size", type=int, default=513, help="Image Cropsize.")
 envarg.add_argument("--resnet_model", default="resnet_v2_50", choices=["resnet_v2_50", "resnet_v2_101", "resnet_v2_152", "resnet_v2_200"], help="Resnet model to use as feature extractor. Choose one of: resnet_v2_50 or resnet_v2_101")
 
 envarg.add_argument("--current_best_val_loss", type=int, default=99999, help="Best validation loss value.")
@@ -56,16 +58,17 @@ args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu_id)
 
 LOG_FOLDER = './tboard_logs'
-TRAIN_DATASET_DIR="./dataset/"
+TRAIN_DATASET_DIR="./dataset/tfrecords"
 TRAIN_FILE = 'train.tfrecords'
 VALIDATION_FILE = 'validation.tfrecords'
 
+crop_size = args.crop_size
 training_filenames = [os.path.join(TRAIN_DATASET_DIR,TRAIN_FILE)]
 training_dataset = tf.data.TFRecordDataset(training_filenames)
 training_dataset = training_dataset.map(tf_record_parser)
 training_dataset = training_dataset.map(rescale_image_and_annotation_by_factor)
 training_dataset = training_dataset.map(distort_randomly_image_color)
-training_dataset = training_dataset.map(scale_image_with_crop_padding)
+training_dataset = training_dataset.map(lambda image, annotation: scale_image_with_crop_padding(image, annotation, crop_size))
 training_dataset = training_dataset.map(random_flip_image_and_annotation)  # Parse the record into tensors.
 training_dataset = training_dataset.repeat()  # number of epochs
 training_dataset = training_dataset.shuffle(buffer_size=500)
@@ -74,9 +77,12 @@ training_dataset = training_dataset.batch(args.batch_size)
 validation_filenames = [os.path.join(TRAIN_DATASET_DIR,VALIDATION_FILE)]
 validation_dataset = tf.data.TFRecordDataset(validation_filenames)
 validation_dataset = validation_dataset.map(tf_record_parser)  # Parse the record into tensors.
-validation_dataset = validation_dataset.map(scale_image_with_crop_padding)
+validation_dataset = validation_dataset.map(lambda image, annotation: scale_image_with_crop_padding(image, annotation, crop_size))
 validation_dataset = validation_dataset.shuffle(buffer_size=100)
 validation_dataset = validation_dataset.batch(args.batch_size)
+
+resnet_checkpoints_path = "./resnet/checkpoints/"
+download_resnet_checkpoint_if_necessary(resnet_checkpoints_path, args.resnet_model)
 
 # A feedable iterator is defined by a handle placeholder and its structure. We
 # could use the `output_types` and `output_shapes` properties of either
@@ -86,7 +92,7 @@ handle = tf.placeholder(tf.string, shape=[])
 
 iterator = tf.data.Iterator.from_string_handle(
     handle, training_dataset.output_types, training_dataset.output_shapes)
-batch_images_tf, batch_labels_tf, _ = iterator.get_next()
+batch_images_tf, batch_labels_tf = iterator.get_next()
 
 # You can use feedable iterators with a variety of different kinds of iterator
 # (such as one-shot and initializable iterators).
@@ -107,8 +113,8 @@ valid_labels_batch_tf, valid_logits_batch_tf = training.get_valid_logits_and_lab
     logits_batch_tensor=logits_tf,
     class_labels=class_labels)
 
-cross_entropies = tf.nn.softmax_cross_entropy_with_logits(logits=valid_logits_batch_tf,
-                                                          labels=valid_labels_batch_tf)
+cross_entropies = tf.nn.softmax_cross_entropy_with_logits_v2(logits=valid_logits_batch_tf,
+                                                             labels=valid_labels_batch_tf)
 cross_entropy_tf = tf.reduce_mean(cross_entropies)
 predictions_tf = tf.argmax(logits_tf, axis=3)
 
@@ -148,8 +154,7 @@ current_best_val_loss = np.inf
 
 with tf.Session() as sess:
     # Create the summary writer -- to write all the tboard_log
-    # into a specified file. This file can be later read
-    # by tensorboard.
+    # into a specified file. This file can be later read by tensorboard.
     train_writer = tf.summary.FileWriter(LOG_FOLDER + "/train", sess.graph)
     test_writer = tf.summary.FileWriter(LOG_FOLDER + '/val')
 
@@ -157,11 +162,14 @@ with tf.Session() as sess:
     sess.run(tf.local_variables_initializer())
     sess.run(tf.global_variables_initializer())
 
+    # load resnet checkpoints
     try:
         restorer.restore(sess, "./resnet/checkpoints/" + args.resnet_model + ".ckpt")
         print("Model checkpoits for " + args.resnet_model + " restored!")
+        # exit()
     except FileNotFoundError:
-        print("Please download " + args.resnet_model + " model checkpoints from: https://github.com/tensorflow/models/tree/master/research/slim")
+        print("ResNet checkpoints not found. Please download " + args.resnet_model + " model checkpoints from: https://github.com/tensorflow/models/tree/master/research/slim")
+
 
     # The `Iterator.string_handle()` method returns a tensor that can be evaluated
     # and used to feed the `handle` placeholder.
@@ -183,6 +191,7 @@ with tf.Session() as sess:
                                                                                 feed_dict={is_training_tf:True,
                                                                                            handle: training_handle})
             training_average_loss += train_loss
+            exit()
             if i % 10 == 0:
                 train_writer.add_summary(summary_string, global_step_np)
 
