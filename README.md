@@ -26,7 +26,7 @@ Before training, create a folder named ```checkpoints/``` inside the ```resnet/`
 To train this model run:
 
 ```
-python train.py --starting_learning_rate=0.00001 --batch_norm_decay=0.997 --gpu_id=0 --resnet_model=resnet_v2_50
+python train.py --starting_learning_rate=0.00001 --batch_norm_decay=0.997 --crop_size=513 --gpu_id=0 --resnet_model=resnet_v2_50
 ```
 
 Check out the *train.py* file for more input argument options. Each run produces a folder inside the *tboard_logs* directory (create it if not there).
@@ -36,6 +36,12 @@ To evaluate the model, run the *test.py* file passing to it the *model_id* param
 ```
 python test.py --model_id=16645
 ```
+
+## Retraining 
+
+To use a different dataset, you just need to modify the ```CreateTfRecord.ipynb``` notebook inside the ```dataset/``` folder, to suit your needs. 
+
+Also, be aware that originally Deeplab_v3 performs random crops of size *513x513* on the input images. This **crop_size** parameter can be configured by changing the *crop_size* hyper-parameter in **train.py**.
 
 ## Datasets
 
