@@ -61,6 +61,6 @@ Obs. You can skip that part and direct download the datasets used in this experi
 - Pixel accuracy: ~91%
 - Mean Accuracy: ~82%
 - Mean Intersection over Union (mIoU): ~74%
-- Frequency weighed Intersection over Union: ~86.
+- Frequency weighed Intersection over Union: ~86
 
 ![Results](https://github.com/sthalles/sthalles.github.io/blob/master/assets/deep_segmentation_network/results1.png)
