@@ -191,7 +191,7 @@ with tf.Session() as sess:
                                                                                 feed_dict={is_training_tf:True,
                                                                                            handle: training_handle})
             training_average_loss += train_loss
-            exit()
+
             if i % 10 == 0:
                 train_writer.add_summary(summary_string, global_step_np)
 
