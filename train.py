@@ -46,7 +46,7 @@ envarg.add_argument("--multi_grid", type=list, default=[1,2,4], help="Spatial Py
 envarg.add_argument("--output_stride", type=int, default=16, help="Spatial Pyramid Pooling rates")
 envarg.add_argument("--gpu_id", type=int, default=0, help="Id of the GPU to be used")
 envarg.add_argument("--crop_size", type=int, default=513, help="Image Cropsize.")
-envarg.add_argument("--resnet_model", default="resnet_v2_101", choices=["resnet_v2_50", "resnet_v2_101", "resnet_v2_152", "resnet_v2_200"], help="Resnet model to use as feature extractor. Choose one of: resnet_v2_50 or resnet_v2_101")
+envarg.add_argument("--resnet_model", default="resnet_v2_50", choices=["resnet_v2_50", "resnet_v2_101", "resnet_v2_152", "resnet_v2_200"], help="Resnet model to use as feature extractor. Choose one of: resnet_v2_50 or resnet_v2_101")
 
 envarg.add_argument("--current_best_val_loss", type=int, default=99999, help="Best validation loss value.")
 envarg.add_argument("--accumulated_validation_miou", type=int, default=0, help="Accumulated validation intersection over union.")
