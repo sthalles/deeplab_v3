@@ -21,7 +21,7 @@ def atrous_spatial_pyramid_pooling(net, scope, depth=256, reuse=None):
         feature_map_size = tf.shape(net)
 
         # apply global average pooling
-        image_level_features = tf.reduce_mean(net, [1, 2], name='image_level_global_pool', keep_dims=True)
+        image_level_features = tf.reduce_mean(net, [1, 2], name='image_level_global_pool', keepdims=True)
         image_level_features = slim.conv2d(image_level_features, depth, [1, 1], scope="image_level_conv_1x1",
                                            activation_fn=None)
         image_level_features = tf.image.resize_bilinear(image_level_features, (feature_map_size[1], feature_map_size[2]))
@@ -45,7 +45,7 @@ def deeplab_v3(inputs, args, is_training, reuse):
     # mean subtraction normalization
     inputs = inputs - [_R_MEAN, _G_MEAN, _B_MEAN]
 
-    # inputs has shape [batch, 513, 513, 3]
+    # inputs has shape - Original: [batch, 513, 513, 3]
     with slim.arg_scope(resnet_utils.resnet_arg_scope(args.l2_regularizer, is_training,
                                                       args.batch_norm_decay,
                                                       args.batch_norm_epsilon)):

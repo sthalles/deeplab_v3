@@ -8,7 +8,7 @@ For a complete documentation of this implementation, check out the [blog post](h
 
 - Python 3.x
 - Numpy
-- Tensorflow 1.4.0
+- Tensorflow 1.7.0
 
 ## Downloads
 
@@ -19,14 +19,14 @@ Download the model checkpoints and dataset.
   * [Option 1](https://mega.nz/#F!LlFCSaBB!1L_EoepUwhrHw4lHv1HRaA)
   * [Option 2](http://www.mediafire.com/?wx7h526chc4ar)
 
+Place the checkpoints files inside `./dataset/tfrecords`. If the folder **does not** exist, create it.
+
 ## Training and Eval
 
-Before training, create a folder named ```checkpoints/``` inside the ```resnet/``` directory. Download the pre-trained [resnet-50](https://arxiv.org/abs/1603.05027) or [resnet-101](https://arxiv.org/abs/1603.05027) models, and place the files inside ```checkpoints/```.
-
-To train this model run:
+Once you have the training and validation *TfRefords* files, just run the command bellow. Before running Deeplab_v3, the code will look for the proper `ResNets` checkpoints inside ```./resnet/checkpoints```, if the folder does not exist, it will first be **downloaded**.
 
 ```
-python train.py --starting_learning_rate=0.00001 --batch_norm_decay=0.997 --gpu_id=0 --resnet_model=resnet_v2_50
+python train.py --starting_learning_rate=0.00001 --batch_norm_decay=0.997 --crop_size=513 --gpu_id=0 --resnet_model=resnet_v2_50
 ```
 
 Check out the *train.py* file for more input argument options. Each run produces a folder inside the *tboard_logs* directory (create it if not there).
@@ -37,11 +37,22 @@ To evaluate the model, run the *test.py* file passing to it the *model_id* param
 python test.py --model_id=16645
 ```
 
+## Retraining 
+
+To use a different dataset, you just need to modify the ```CreateTfRecord.ipynb``` notebook inside the ```dataset/``` folder, to suit your needs. 
+
+Also, be aware that originally Deeplab_v3 performs random crops of size *513x513* on the input images. This **crop_size** parameter can be configured by changing the *crop_size* hyper-parameter in **train.py**.
+
 ## Datasets
 
-To create the dataset, first make sure you have the [Pascal VOC 2012](http://host.robots.ox.ac.uk/pascal/VOC/voc2012/) and the [Semantic Boundaries Dataset and Benchmark](http://home.bharathh.info/pubs/codes/SBD/download.html) datasets downloaded.
+To create the dataset, first make sure you have the [Pascal VOC 2012](http://host.robots.ox.ac.uk/pascal/VOC/voc2012/) and/or the [Semantic Boundaries Dataset and Benchmark](http://home.bharathh.info/pubs/codes/SBD/download.html) datasets downloaded.
 
-After, head to ```dataset/``` and run the ```CreateTfRecord.ipynb``` notebook. The ```custom_train.txt``` file contains the name of the images selected for training. This file is designed to use the Pascal VOC 2012 set as a **TESTING** set. Therefore, it doesn't contain any images from the VOC 2012 val dataset. For more info, see the **Training** section of [Deeplab Image Semantic Segmentation Network](https://sthalles.github.io/deep_segmentation_network/).
+**Note: You do not need both datasets.**
+ - If you just want to test the code with one of the datasets (say the SBD), run the notebook normally, and it should work.
+
+After, head to ```dataset/``` and run the ```CreateTfRecord.ipynb``` notebook. 
+
+The ```custom_train.txt``` file contains the name of the images selected for training. This file is designed to use the Pascal VOC 2012 set as a **TESTING** set. Therefore, it doesn't contain any images from the VOC 2012 val dataset. For more info, see the **Training** section of [Deeplab Image Semantic Segmentation Network](https://sthalles.github.io/deep_segmentation_network/).
 
 Obs. You can skip that part and direct download the datasets used in this experiment - See the **Downloads** section
 
@@ -50,6 +61,6 @@ Obs. You can skip that part and direct download the datasets used in this experi
 - Pixel accuracy: ~91%
 - Mean Accuracy: ~82%
 - Mean Intersection over Union (mIoU): ~74%
-- Frequency weighed Intersection over Union: ~86.
+- Frequency weighed Intersection over Union: ~86
 
 ![Results](https://github.com/sthalles/sthalles.github.io/blob/master/assets/deep_segmentation_network/results1.png)
