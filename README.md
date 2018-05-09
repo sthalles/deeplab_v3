@@ -12,11 +12,17 @@ For a complete documentation of this implementation, check out the [blog post](h
 
 ## Downloads
 
-Download the model checkpoints and dataset.
+### Evaluation
+
+Pre-trained model.
 
 - [checkpoints](https://www.dropbox.com/sh/s7sx69pqjhrk0s4/AACXWCRd9JJ0zvcvDES9G3sba?dl=0)
 
 Place the checkpoints folder inside `./tboard_logs`. If the folder **does not** exist, create it.
+
+### Retraining
+
+Original datasets used for training.
 
 - Dataset
   * [Option 1](https://mega.nz/#F!LlFCSaBB!1L_EoepUwhrHw4lHv1HRaA)
