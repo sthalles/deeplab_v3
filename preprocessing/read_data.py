@@ -1,7 +1,10 @@
 import tensorflow as tf
 from preprocessing.inception_preprocessing import apply_with_random_selector, distort_color
+import urllib
+import tarfile
+import os
 
-def random_flip_image_and_annotation(image_tensor, annotation_tensor, shapes):
+def random_flip_image_and_annotation(image_tensor, annotation_tensor):
     """Accepts image tensor and annotation tensor and returns randomly flipped tensors of both.
     The function performs random flip of image and annotation tensors with probability of 1/2
     The flip is performed or not performed for image and annotation consistently, so that
@@ -41,10 +44,10 @@ def random_flip_image_and_annotation(image_tensor, annotation_tensor, shapes):
                                                         true_fn=lambda: tf.image.flip_left_right(annotation_tensor),
                                                         false_fn=lambda: annotation_tensor)
 
-    return randomly_flipped_img, tf.reshape(randomly_flipped_annotation, original_shape), shapes
+    return randomly_flipped_img, tf.reshape(randomly_flipped_annotation, original_shape)
 
 
-def rescale_image_and_annotation_by_factor(image, annotation, shapes, nin_scale=0.5, max_scale=2):
+def rescale_image_and_annotation_by_factor(image, annotation, nin_scale=0.5, max_scale=2):
     #We apply data augmentation by randomly scaling theinput images(from 0.5 to 2.0)
     #and randomly left - right flipping during training.
     input_shape = tf.shape(image)[0:2]
@@ -63,24 +66,49 @@ def rescale_image_and_annotation_by_factor(image, annotation, shapes, nin_scale=
     annotation = tf.image.resize_images(annotation, scaled_input_shape,
                                         method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
 
-    return image, annotation, shapes
+    return image, annotation
 
 
-def scale_image_with_crop_padding(image, annotation, shapes):
-    image_croped = tf.image.resize_image_with_crop_or_pad(image,513,513)
+def download_resnet_checkpoint_if_necessary(resnet_checkpoints_path, resnet_model_name):
+    """
+    Check if the resnet checkpoints are already downloaded, if not download it
+    :param resnet_checkpoints_path: string: path where the properly resnet checkpoint files should be found
+    :param resnet_model_name: one of resnet_v2_50 or resnet_v2_101
+    :return: None
+    """
+    if not os.path.exists(resnet_checkpoints_path):
+        # create the path and download the resnet checkpoints
+        os.mkdir(resnet_checkpoints_path)
+
+        filename = resnet_model_name + "_2017_04_14.tar.gz"
+
+        url = "http://download.tensorflow.org/models/" + filename
+        full_file_path = os.path.join(resnet_checkpoints_path, filename)
+        urllib.request.urlretrieve(url, full_file_path)
+        thetarfile = tarfile.open(full_file_path, "r:gz")
+        thetarfile.extractall(path=resnet_checkpoints_path)
+        thetarfile.close()
+        print("Resnet:", resnet_model_name, "successfully downloaded.")
+    else:
+        print("ResNet checkpoints file successfully found.")
+
+
+def scale_image_with_crop_padding(image, annotation, crop_size):
+
+    image_croped = tf.image.resize_image_with_crop_or_pad(image,crop_size,crop_size)
 
     # Shift all the classes by one -- to be able to differentiate
     # between zeros representing padded values and zeros representing
     # a particular semantic class.
     annotation_shifted_classes = annotation + 1
 
-    cropped_padded_annotation = tf.image.resize_image_with_crop_or_pad(annotation_shifted_classes,513,513)
+    cropped_padded_annotation = tf.image.resize_image_with_crop_or_pad(annotation_shifted_classes,crop_size,crop_size)
 
     mask_out_number=255
     annotation_additional_mask_out = tf.to_int32(tf.equal(cropped_padded_annotation, 0)) * (mask_out_number+1)
     cropped_padded_annotation = cropped_padded_annotation + annotation_additional_mask_out - 1
 
-    return image_croped, tf.squeeze(cropped_padded_annotation), shapes
+    return image_croped, tf.squeeze(cropped_padded_annotation)
 
 def tf_record_parser(record):
     keys_to_features = {
@@ -103,9 +131,9 @@ def tf_record_parser(record):
     annotation = tf.reshape(annotation, (height,width,1), name="annotation_reshape")
     annotation = tf.to_int32(annotation)
 
-    return tf.to_float(image), annotation, (height, width)
+    return tf.to_float(image), annotation
 
-def distort_randomly_image_color(image_tensor, annotation_tensor, shapes):
+def distort_randomly_image_color(image_tensor, annotation_tensor):
     """Accepts image tensor of (width, height, 3) and returns color distorted image.
     The function performs random brightness, saturation, hue, contrast change as it is performed
     for inception model training in TF-Slim (you can find the link below in comments). All the
@@ -139,4 +167,4 @@ def distort_randomly_image_color(image_tensor, annotation_tensor, shapes):
 
     img_float_distorted_original_range = distorted_image * 255
 
-    return img_float_distorted_original_range, annotation_tensor, shapes
+    return img_float_distorted_original_range, annotation_tensor
