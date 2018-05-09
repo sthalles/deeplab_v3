@@ -16,7 +16,7 @@ Download the model checkpoints and dataset.
 
 - [checkpoints](https://www.dropbox.com/sh/s7sx69pqjhrk0s4/AACXWCRd9JJ0zvcvDES9G3sba?dl=0)
 
-Place the checkpoints files inside `./dataset/tfrecords`. If the folder **does not** exist, create it.
+Place the checkpoints folder inside `./tboard_logs`. If the folder **does not** exist, create it.
 
 - Dataset
   * [Option 1](https://mega.nz/#F!LlFCSaBB!1L_EoepUwhrHw4lHv1HRaA)
