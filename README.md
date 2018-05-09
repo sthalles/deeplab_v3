@@ -15,9 +15,14 @@ For a complete documentation of this implementation, check out the [blog post](h
 Download the model checkpoints and dataset.
 
 - [checkpoints](https://www.dropbox.com/sh/s7sx69pqjhrk0s4/AACXWCRd9JJ0zvcvDES9G3sba?dl=0)
+
+Place the checkpoints files inside `./dataset/tfrecords`. If the folder **does not** exist, create it.
+
 - Dataset
   * [Option 1](https://mega.nz/#F!LlFCSaBB!1L_EoepUwhrHw4lHv1HRaA)
   * [Option 2](http://www.mediafire.com/?wx7h526chc4ar)
+
+Place the tfrecords inside ```./dataset/tfrecords```. Create the folder if it **does not** exist.
 
 ## Training and Eval
 
