@@ -16,7 +16,7 @@ plt.interactive(False)
 parser = argparse.ArgumentParser()
 
 envarg = parser.add_argument_group('Eval params')
-envarg.add_argument("--model_id", type=int, help="Model id name to be loaded.")
+envarg.add_argument("--model_id", default=16645, type=int, help="Model id name to be loaded.")
 input_args = parser.parse_args()
 
 # best: 16645
@@ -68,13 +68,13 @@ class_labels = [v for v in range((args.number_of_classes+1))]
 class_labels[-1] = 255
 
 LOG_FOLDER = './tboard_logs'
-TEST_DATASET_DIR="./dataset/"
+TEST_DATASET_DIR="./dataset/tfrecords"
 TEST_FILE = 'test.tfrecords'
 
 test_filenames = [os.path.join(TEST_DATASET_DIR,TEST_FILE)]
 test_dataset = tf.data.TFRecordDataset(test_filenames)
 test_dataset = test_dataset.map(tf_record_parser)  # Parse the record into tensors.
-test_dataset = test_dataset.map(scale_image_with_crop_padding)
+test_dataset = test_dataset.map(lambda image, annotation, image_shape: scale_image_with_crop_padding(image, annotation, image_shape, args.crop_size))
 test_dataset = test_dataset.shuffle(buffer_size=100)
 test_dataset = test_dataset.batch(args.batch_size)
 
@@ -88,8 +88,8 @@ valid_labels_batch_tf, valid_logits_batch_tf = training.get_valid_logits_and_lab
     logits_batch_tensor=logits_tf,
     class_labels=class_labels)
 
-cross_entropies_tf = tf.nn.softmax_cross_entropy_with_logits(logits=valid_logits_batch_tf,
-                                                             labels=valid_labels_batch_tf)
+cross_entropies_tf = tf.nn.softmax_cross_entropy_with_logits_v2(logits=valid_logits_batch_tf,
+                                                                labels=valid_labels_batch_tf)
 
 cross_entropy_mean_tf = tf.reduce_mean(cross_entropies_tf)
 tf.summary.scalar('cross_entropy', cross_entropy_mean_tf)
@@ -154,12 +154,12 @@ with tf.Session() as sess:
                 mean_IoU.append(IoU)
                 mean_freq_weighted_IU.append(freq_weighted_IU)
 
-                #f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8, 8))
+                f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8, 8))
 
-                #ax1.imshow(input_image.astype(np.uint8))
-                #ax2.imshow(label_image)
-                #ax3.imshow(pred_image)
-                #plt.show()
+                ax1.imshow(input_image.astype(np.uint8))
+                ax2.imshow(label_image)
+                ax3.imshow(pred_image)
+                plt.show()
 
         except tf.errors.OutOfRangeError:
             break

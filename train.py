@@ -68,7 +68,7 @@ training_dataset = tf.data.TFRecordDataset(training_filenames)
 training_dataset = training_dataset.map(tf_record_parser)
 training_dataset = training_dataset.map(rescale_image_and_annotation_by_factor)
 training_dataset = training_dataset.map(distort_randomly_image_color)
-training_dataset = training_dataset.map(lambda image, annotation: scale_image_with_crop_padding(image, annotation, crop_size))
+training_dataset = training_dataset.map(lambda image, annotation, image_shape: scale_image_with_crop_padding(image, annotation, image_shape, crop_size))
 training_dataset = training_dataset.map(random_flip_image_and_annotation)  # Parse the record into tensors.
 training_dataset = training_dataset.repeat()  # number of epochs
 training_dataset = training_dataset.shuffle(buffer_size=500)
@@ -77,7 +77,7 @@ training_dataset = training_dataset.batch(args.batch_size)
 validation_filenames = [os.path.join(TRAIN_DATASET_DIR,VALIDATION_FILE)]
 validation_dataset = tf.data.TFRecordDataset(validation_filenames)
 validation_dataset = validation_dataset.map(tf_record_parser)  # Parse the record into tensors.
-validation_dataset = validation_dataset.map(lambda image, annotation: scale_image_with_crop_padding(image, annotation, crop_size))
+validation_dataset = validation_dataset.map(lambda image, annotation, image_shape: scale_image_with_crop_padding(image, annotation, image_shape, crop_size))
 validation_dataset = validation_dataset.shuffle(buffer_size=100)
 validation_dataset = validation_dataset.batch(args.batch_size)
 
@@ -92,7 +92,7 @@ handle = tf.placeholder(tf.string, shape=[])
 
 iterator = tf.data.Iterator.from_string_handle(
     handle, training_dataset.output_types, training_dataset.output_shapes)
-batch_images_tf, batch_labels_tf = iterator.get_next()
+batch_images_tf, batch_labels_tf, _ = iterator.get_next()
 
 # You can use feedable iterators with a variety of different kinds of iterator
 # (such as one-shot and initializable iterators).

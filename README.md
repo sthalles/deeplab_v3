@@ -42,6 +42,8 @@ Check out the *train.py* file for more input argument options. Each run produces
 
 To evaluate the model, run the *test.py* file passing to it the *model_id* parameter (the name of the folder created inside *tboard_logs* during training).
 
+Note: Make sure the `test.tfrecords` is downloaded and placed inside `./dataset/tfrecords`.
+
 ```
 python test.py --model_id=16645
 ```
