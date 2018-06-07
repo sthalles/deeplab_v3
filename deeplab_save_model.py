@@ -49,10 +49,10 @@ def main(_):
 
         # reshape the input image to its original dimension
         tf_example['x'] = tf.reshape(tf_example['x'], (1, image_height_tensor, image_width_tensor, 3))
-        x = tf.identity(tf_example['x'], name='x')  # use tf.identity() to assign name
+        input_tensor = tf.identity(tf_example['x'], name='x')  # use tf.identity() to assign name
 
         # perform inference on the input image
-        logits_tf = network.deeplab_v3(x, args, is_training=False, reuse=False)
+        logits_tf = network.deeplab_v3(input_tensor, args, is_training=False, reuse=False)
 
         # extract the segmentation mask
         predictions_tf = tf.argmax(logits_tf, axis=3)
@@ -76,7 +76,7 @@ def main(_):
         builder = tf.saved_model.builder.SavedModelBuilder(export_path)
 
         # Creates the TensorInfo protobuf objects that encapsulates the input/output tensors
-        tensor_info_input = tf.saved_model.utils.build_tensor_info(x)
+        tensor_info_input = tf.saved_model.utils.build_tensor_info(input_tensor)
         tensor_info_height = tf.saved_model.utils.build_tensor_info(image_height_tensor)
         tensor_info_width = tf.saved_model.utils.build_tensor_info(image_width_tensor)
 
