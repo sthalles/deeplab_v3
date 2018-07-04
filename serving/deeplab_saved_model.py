@@ -12,7 +12,7 @@ import json
 # os.environ["CUDA_VISIBLE_DEVICES"]="3"
 
 tf.app.flags.DEFINE_integer('model_version', 1, 'Models version number.')
-tf.app.flags.DEFINE_string('work_dir', '../tboard_logs', 'Working directory.')
+tf.app.flags.DEFINE_string('work_dir', './tboard_logs', 'Working directory.')
 tf.app.flags.DEFINE_integer('model_id', 16645, 'Model id name to be loaded.')
 tf.app.flags.DEFINE_string('export_model_dir', "./versions", 'Directory where the model exported files should be placed.')
 
