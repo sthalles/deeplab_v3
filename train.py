@@ -52,7 +52,7 @@ envarg.add_argument("--current_best_val_loss", type=int, default=99999, help="Be
 envarg.add_argument("--accumulated_validation_miou", type=int, default=0, help="Accumulated validation intersection over union.")
 
 trainarg = parser.add_argument_group('Training')
-trainarg.add_argument("--batch_size", type=int, default=12, help="Batch size for network train.")
+trainarg.add_argument("--batch_size", type=int, default=8, help="Batch size for network train.")
 
 args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu_id)

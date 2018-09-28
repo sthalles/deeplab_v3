@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.python.ops import control_flow_ops
+print("TF version:", tf.__version__)
 import numpy as np
 from matplotlib import pyplot as plt
 import network
@@ -120,7 +120,9 @@ with tf.Session() as sess:
 
     while True:
         try:
-            batch_images_np, batch_predictions_np, batch_labels_np, batch_shapes_np, summary_string= sess.run([batch_images_tf, predictions_tf, batch_labels_tf, batch_shapes_tf, merged_summary_op])
+            batch_images_np, batch_predictions_np, batch_labels_np, batch_shapes_np, summary_string = \
+                sess.run([batch_images_tf, predictions_tf, batch_labels_tf, batch_shapes_tf, merged_summary_op])
+
             heights, widths = batch_shapes_np
 
             # loop through the images in the batch and extract the valid areas from the tensors

@@ -10,7 +10,7 @@ For a complete documentation of this implementation, check out the [blog post](h
 
 - Python 3.x
 - Numpy
-- Tensorflow 1.7.0
+- Tensorflow 1.10.1
 
 ## Downloads
 

@@ -35,8 +35,7 @@ def get_labels_from_annotation(annotation_tensor, class_labels):
     valid_entries_class_labels = class_labels[:-1]
 
     # Stack the binary masks for each class
-    labels_2d = list(map(lambda x: tf.equal(annotation_tensor, x),
-                    valid_entries_class_labels))
+    labels_2d = list(map(lambda x: tf.equal(annotation_tensor, x), valid_entries_class_labels))
 
     # Perform the merging of all of the binary masks into one matrix
     labels_2d_stacked = tf.stack(labels_2d, axis=2)
