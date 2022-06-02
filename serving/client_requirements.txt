@@ -18,7 +18,7 @@ functools32==3.2.3.post2
 futures==3.2.0
 gast==0.2.0
 grpcio==1.12.1
-html5lib==0.9999999
+html5lib==0.99999999
 idna==2.6
 ipykernel==4.8.2
 ipython==5.7.0
